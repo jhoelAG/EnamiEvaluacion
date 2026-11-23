@@ -1,0 +1,131 @@
+@page "/evaluar"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject IRepositorioPlantillas Repo
+@inject IRepositorioParametros Parametros
+
+<PageTitle>Simulador de VAN · Evaluación Fomento</PageTitle>
+
+<h1 class="h3 mb-1">Simulador de VAN</h1>
+<p class="text-muted mb-3">Prueba rápida con la versión vigente de las fórmulas. No guarda nada: para registrar una evaluación de proyecto use <a href="evaluaciones/nueva">Nueva evaluación de proyecto</a>.</p>
+
+@if (_vigentes.Count == 0)
+{
+    <div class="alert alert-warning">No hay plantillas vigentes. Active una en el editor de fórmulas.</div>
+}
+else
+{
+    <div class="row g-2 align-items-end mb-3">
+        <div class="col-md-6">
+            <label class="form-label">Instrumento de fomento (fórmulas vigentes)</label>
+            <select class="form-select" value="@_idPlantilla" @onchange="CambiarPlantilla">
+                @foreach (var p in _vigentes)
+                {
+                    <option value="@p.Id">@p.Instrumento (v@(p.Version))</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    @if (_plantilla is not null)
+    {
+        <div class="row g-4">
+            <div class="col-lg-5">
+                @foreach (var grupo in _plantilla.Variables.Where(v => v.EsNumerica).OrderBy(v => v.Origen).ThenBy(v => v.Orden)
+                                                 .GroupBy(v => v.Origen == OrigenVariable.Formulario && !string.IsNullOrEmpty(v.Seccion) ? v.Seccion : Formato.Origen(v.Origen)))
+                {
+                    <h2 class="h6 mt-2">@grupo.Key</h2>
+                    @foreach (var v in grupo)
+                    {
+                        <div class="row g-1 mb-1 align-items-center">
+                            <label class="col-7 col-form-label col-form-label-sm" for="v-@v.Codigo">@v.Nombre</label>
+                            <div class="col-5">
+                                <div class="input-group input-group-sm">
+                                    <input id="v-@v.Codigo" type="number" step="any" class="form-control" @bind="_valores[v.Codigo]" />
+                                    <span class="input-group-text">@v.Unidad</span>
+                                </div>
+                                @if (_fuentes.TryGetValue(v.Codigo, out var fuente))
+                                {
+                                    <div class="small text-muted">@fuente</div>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+                <button class="btn btn-primary mt-3" @onclick="Calcular">Calcular</button>
+                <button class="btn btn-outline-secondary mt-3 ms-2" @onclick="Restablecer">Restablecer valores</button>
+            </div>
+
+            <div class="col-lg-7">
+                @if (_resultado is not null)
+                {
+                    @if (!_resultado.Exitoso)
+                    {
+                        <div class="alert alert-danger">
+                            <strong>No se pudo calcular:</strong>
+                            <ul class="mb-0">@foreach (var e in _resultado.Errores) { <li>@e</li> }</ul>
+                        </div>
+                    }
+                    else
+                    {
+                        <ResultadoVan Resultado="_resultado" Plantilla="_plantilla" />
+                    }
+                }
+                else
+                {
+                    <p class="text-muted">Ingrese los datos y presione «Calcular».</p>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private List<PlantillaCalculo> _vigentes = [];
+    private PlantillaCalculo? _plantilla;
+    private int _idPlantilla;
+    private Dictionary<string, double> _valores = new(StringComparer.OrdinalIgnoreCase);
+    private ResultadoEvaluacion? _resultado;
+    private Dictionary<string, string> _fuentes = new(StringComparer.OrdinalIgnoreCase);
+
+    protected override void OnInitialized()
+    {
+        _vigentes = Repo.Listar().Where(p => p.Estado == EstadoPlantilla.Vigente).ToList();
+        if (_vigentes.Count > 0) Seleccionar(_vigentes[0].Id);
+    }
+
+    private void CambiarPlantilla(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var id)) Seleccionar(id);
+    }
+
+    private void Seleccionar(int id)
+    {
+        _idPlantilla = id;
+        _plantilla = Repo.Obtener(id);
+        Restablecer();
+    }
+
+    private void Restablecer()
+    {
+        _resultado = null;
+        _valores = (_plantilla?.Variables ?? []).Where(v => v.EsNumerica).ToDictionary(v => v.Codigo, v => v.ValorPorDefecto, StringComparer.OrdinalIgnoreCase);
+        // variables de robot y mantenedor: se usa el último valor registrado (por ejemplo, el dólar del día)
+        _fuentes.Clear();
+        var ultimos = Parametros.Ultimos();
+        foreach (var v in _plantilla?.Variables.Where(x => x.Origen != OrigenVariable.Formulario && x.EsNumerica) ?? [])
+        {
+            if (ultimos.TryGetValue(v.Codigo, out var u))
+            {
+                _valores[v.Codigo] = u.Valor;
+                _fuentes[v.Codigo] = $"{u.Fuente}, {u.Fecha:dd-MM-yyyy HH:mm}";
+            }
+            else _fuentes[v.Codigo] = "Valor de referencia de la plantilla";
+        }
+    }
+
+    private void Calcular()
+    {
+        if (_plantilla is not null) _resultado = MotorEvaluacion.Evaluar(_plantilla, _valores);
+    }
+}

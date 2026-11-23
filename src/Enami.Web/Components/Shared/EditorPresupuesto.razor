@@ -1,0 +1,143 @@
+@* Presupuesto y especificaciones técnicas (Anexo 1): actividades que se financian, con los totales de la planilla de ENAMI. *@
+@{
+    var totales = CalculoPresupuesto.Calcular(Lineas, TasaTimbres);
+    var labores = Labores.ToDictionary(l => l.Id);
+}
+<div class="table-responsive mb-2">
+    <table class="table table-sm tabla-compacta align-middle mb-1 tabla-presupuesto" style="table-layout: fixed">
+        <thead>
+            <tr>
+                <th style="width: 220px">Actividad</th>
+                <th style="width: 180px">Financiamiento</th>
+                <th class="text-end" style="width: 140px">Cantidad</th>
+                <th class="text-end" style="width: 110px">Costo US$/unidad</th>
+                <th class="text-end" style="width: 80px">% ENAMI</th>
+                <th class="text-end" style="width: 110px">Capital de riesgo</th>
+                <th class="text-end" style="width: 100px">Crédito</th>
+                <th class="text-end" style="width: 100px">Beneficiario</th>
+                @if (Editable) { <th></th> }
+            </tr>
+        </thead>
+        <tbody>
+            @if (Lineas.Count == 0)
+            {
+                <tr><td colspan="9" class="text-muted small">Sin actividades. @(Editable ? "Agréguelas con el botón de abajo." : "")</td></tr>
+            }
+            @for (int i = 0; i < Lineas.Count; i++)
+            {
+                var linea = Lineas[i];
+                var indice = i;
+                var monto = totales.Lineas[i];
+                <tr>
+                    <td>
+                        <select class="form-select form-select-sm" aria-label="Actividad @(i + 1)" value="@linea.IdLabor" @onchange="e => CambiarLabor(linea, e)" disabled="@(!Editable)">
+                            @foreach (var l in Labores) { <option value="@l.Id">@l.Nombre</option> }
+                        </select>
+                    </td>
+                    <td>
+                        <select class="form-select form-select-sm" aria-label="Financiamiento de la actividad @(i + 1)" value="@linea.Programa" @onchange="e => CambiarPrograma(linea, e)" disabled="@(!Editable)">
+                            @foreach (var p in ProgramasPresupuesto.Todos) { <option value="@p" title="@ProgramasPresupuesto.Nombre(p)">@ProgramasPresupuesto.NombreCorto(p)</option> }
+                        </select>
+                    </td>
+                    <td>
+                        <div class="input-group input-group-sm">
+                            <input type="number" min="0" step="any" class="form-control text-end" aria-label="Cantidad de la actividad @(i + 1)" @bind="linea.Cantidad" @bind:after="Avisar" disabled="@(!Editable)" />
+                            <span class="input-group-text">@(labores.TryGetValue(linea.IdLabor, out var lab) ? lab.Unidad : "")</span>
+                        </div>
+                    </td>
+                    <td><input type="number" min="0" step="any" class="form-control form-control-sm text-end" aria-label="Costo unitario de la actividad @(i + 1)" @bind="linea.CostoUnitario" @bind:after="Avisar" disabled="@(!Editable)" /></td>
+                    <td><input type="number" min="0" max="100" step="any" class="form-control form-control-sm text-end" aria-label="Porcentaje financiado de la actividad @(i + 1)"
+                               value="@(linea.PorcentajeFinanciamiento is decimal f ? (f * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) : "")"
+                               @onchange="e => CambiarPorcentaje(linea, e)" disabled="@(!Editable || linea.Programa == ProgramasPresupuesto.Propio)" /></td>
+                    <td class="text-end">@Formato.Dolares((double)monto.CapitalRiesgo)</td>
+                    <td class="text-end">@Formato.Dolares((double)monto.Credito)</td>
+                    <td class="text-end">@Formato.Dolares((double)monto.AportePropio)</td>
+                    @if (Editable)
+                    {
+                        <td><button class="btn btn-link btn-sm text-danger p-0" title="Quitar" aria-label="Quitar la actividad @(i + 1)" @onclick="() => Quitar(indice)">Quitar</button></td>
+                    }
+                </tr>
+            }
+        </tbody>
+        <tfoot>
+            <tr class="small text-muted">
+                <td colspan="5">Impuesto de timbres y estampillas (@Formato.Numero((double)TasaTimbres, 2) % sobre el capital de riesgo)</td>
+                <td></td><td></td>
+                <td class="text-end">@Formato.Dolares((double)totales.Timbres)</td>
+                @if (Editable) { <td></td> }
+            </tr>
+            <tr class="fw-semibold">
+                <td colspan="5">Totales · inversión total @Formato.Dolares((double)totales.InversionTotal)</td>
+                <td class="text-end">@Formato.Dolares((double)totales.CapitalRiesgo)</td>
+                <td class="text-end">@Formato.Dolares((double)totales.Credito)</td>
+                <td class="text-end">@Formato.Dolares((double)totales.AportePropio)</td>
+                @if (Editable) { <td></td> }
+            </tr>
+        </tfoot>
+    </table>
+</div>
+@if (Editable)
+{
+    <button class="btn btn-outline-primary btn-sm mb-2" @onclick="Agregar">Agregar actividad</button>
+}
+<div class="small text-muted mb-3">
+    Reconocimiento: ENAMI aporta el % indicado del costo como capital de riesgo. Crédito para el desarrollo: ENAMI presta el % indicado
+    (por defecto la mitad) y el beneficiario lo devuelve, por eso también se suma a su aporte. Costos medios de la tarificación ENAMI 2026; se pueden corregir en cada actividad.
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<DatosLineaPresupuesto> Lineas { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<LaborTarifada> Labores { get; set; } = [];
+    [Parameter] public bool Editable { get; set; }
+    [Parameter] public decimal TasaTimbres { get; set; }
+    [Parameter] public EventCallback Cambio { get; set; }
+
+    private Task Avisar() => Cambio.InvokeAsync();
+
+    private Task Agregar()
+    {
+        var l = Labores.FirstOrDefault(x => x.CostoUnitario > 0) ?? Labores.FirstOrDefault();
+        if (l is null) return Task.CompletedTask;
+        Lineas.Add(new DatosLineaPresupuesto
+        {
+            IdLabor = l.Id, Programa = l.Programa, CostoUnitario = l.CostoUnitario,
+            PorcentajeFinanciamiento = CalculoPresupuesto.FraccionPorDefecto(l.Programa, l)
+        });
+        return Avisar();
+    }
+
+    private Task Quitar(int indice)
+    {
+        Lineas.RemoveAt(indice);
+        return Avisar();
+    }
+
+    /// <summary>Al cambiar la actividad se proponen su costo medio, su forma de financiamiento y su porcentaje.</summary>
+    private Task CambiarLabor(DatosLineaPresupuesto linea, ChangeEventArgs e)
+    {
+        if (!short.TryParse(e.Value?.ToString(), out var id)) return Task.CompletedTask;
+        var l = Labores.FirstOrDefault(x => x.Id == id);
+        linea.IdLabor = id;
+        if (l is not null)
+        {
+            linea.CostoUnitario = l.CostoUnitario;
+            if (l.Programa == ProgramasPresupuesto.Propio || linea.Programa == ProgramasPresupuesto.Propio) linea.Programa = l.Programa;
+            linea.PorcentajeFinanciamiento = CalculoPresupuesto.FraccionPorDefecto(linea.Programa, l);
+        }
+        return Avisar();
+    }
+
+    private Task CambiarPrograma(DatosLineaPresupuesto linea, ChangeEventArgs e)
+    {
+        linea.Programa = e.Value?.ToString() ?? ProgramasPresupuesto.Reconocimiento;
+        linea.PorcentajeFinanciamiento = CalculoPresupuesto.FraccionPorDefecto(linea.Programa, Labores.FirstOrDefault(x => x.Id == linea.IdLabor));
+        return Avisar();
+    }
+
+    private Task CambiarPorcentaje(DatosLineaPresupuesto linea, ChangeEventArgs e)
+    {
+        linea.PorcentajeFinanciamiento = decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var p)
+            ? p / 100 : null;
+        return Avisar();
+    }
+}

@@ -1,0 +1,324 @@
+/* =========================================================================
+   Identidad visual de ENAMI (tomada del sitio enami.cl):
+   turquesa #00C4B3 (color principal), naranja #F88D2B (acento),
+   gris #53585F y tipografía Catamaran (licencia SIL OFL, incluida en /fonts).
+   Para textos sobre color se usan tonos más oscuros del turquesa,
+   de modo que el contraste cumpla con WCAG AA (RNF-01).
+   ========================================================================= */
+
+@font-face { font-family: 'Catamaran'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/catamaran-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Catamaran'; font-style: normal; font-weight: 600; font-display: swap; src: url('fonts/catamaran-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Catamaran'; font-style: normal; font-weight: 700; font-display: swap; src: url('fonts/catamaran-latin-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Catamaran'; font-style: normal; font-weight: 800; font-display: swap; src: url('fonts/catamaran-latin-800-normal.woff2') format('woff2'); }
+
+:root {
+    --enami-turquesa: #00C4B3;
+    --enami-turquesa-medio: #00A396;
+    --enami-turquesa-oscuro: #007A70;
+    --enami-turquesa-profundo: #00564F;
+    --enami-turquesa-suave: #E3F7F5;
+    --enami-naranjo: #F88D2B;
+    --enami-naranjo-oscuro: #C8650F;
+    --enami-naranjo-suave: #FEF0E3;
+    --enami-gris: #53585F;
+    --enami-gris-claro: #7D8285;
+    --enami-borde: #E2DEE4;
+    --enami-fondo: #F4F1F5;
+    --enami-texto: #2E3236;
+
+    /* Bootstrap: el «primario» pasa a ser el turquesa oscuro de ENAMI */
+    --bs-primary: var(--enami-turquesa-oscuro);
+    --bs-primary-rgb: 0, 122, 112;
+    --bs-link-color: var(--enami-turquesa-oscuro);
+    --bs-link-color-rgb: 0, 122, 112;
+    --bs-link-hover-color: var(--enami-turquesa-profundo);
+    --bs-link-hover-color-rgb: 0, 86, 79;
+    --bs-body-font-family: 'Catamaran', 'Segoe UI', Arial, sans-serif;
+    --bs-body-color: var(--enami-texto);
+    --bs-body-bg: var(--enami-fondo);
+    --bs-border-color: var(--enami-borde);
+    --bs-secondary-color: var(--enami-gris-claro);
+    --bs-focus-ring-color: rgba(0, 196, 179, .35);
+}
+
+html, body {
+    font-family: var(--bs-body-font-family);
+    color: var(--enami-texto);
+    background: var(--enami-fondo);
+}
+
+body { font-size: 1rem; line-height: 1.5; }
+
+h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
+    font-family: 'Catamaran', 'Segoe UI', Arial, sans-serif;
+    font-weight: 700;
+    color: var(--enami-texto);
+    letter-spacing: -.01em;
+}
+
+h1, .h3 { color: var(--enami-turquesa-profundo); }
+
+a, .btn-link { color: var(--enami-turquesa-oscuro); }
+a:hover, .btn-link:hover { color: var(--enami-turquesa-profundo); }
+
+.text-muted, .form-text { color: var(--enami-gris-claro) !important; }
+
+/* ---- Botones ---- */
+.btn { font-weight: 600; border-radius: 6px; }
+
+.btn-primary {
+    --bs-btn-bg: var(--enami-turquesa-oscuro);
+    --bs-btn-border-color: var(--enami-turquesa-oscuro);
+    --bs-btn-hover-bg: var(--enami-turquesa-profundo);
+    --bs-btn-hover-border-color: var(--enami-turquesa-profundo);
+    --bs-btn-active-bg: var(--enami-turquesa-profundo);
+    --bs-btn-active-border-color: var(--enami-turquesa-profundo);
+    --bs-btn-disabled-bg: var(--enami-turquesa-medio);
+    --bs-btn-disabled-border-color: var(--enami-turquesa-medio);
+    --bs-btn-focus-shadow-rgb: 0, 196, 179;
+}
+
+.btn-outline-primary {
+    --bs-btn-color: var(--enami-turquesa-oscuro);
+    --bs-btn-border-color: var(--enami-turquesa-oscuro);
+    --bs-btn-hover-bg: var(--enami-turquesa-oscuro);
+    --bs-btn-hover-border-color: var(--enami-turquesa-oscuro);
+    --bs-btn-active-bg: var(--enami-turquesa-profundo);
+    --bs-btn-active-border-color: var(--enami-turquesa-profundo);
+    --bs-btn-focus-shadow-rgb: 0, 196, 179;
+}
+
+/* Acción destacada (por ejemplo, «Nueva solicitud»): naranja de ENAMI con texto oscuro legible */
+.btn-acento {
+    --bs-btn-color: #1F2326;
+    --bs-btn-bg: var(--enami-naranjo);
+    --bs-btn-border-color: var(--enami-naranjo);
+    --bs-btn-hover-color: #1F2326;
+    --bs-btn-hover-bg: #F67D10;
+    --bs-btn-hover-border-color: #F67D10;
+    --bs-btn-active-bg: var(--enami-naranjo-oscuro);
+    --bs-btn-active-border-color: var(--enami-naranjo-oscuro);
+    --bs-btn-focus-shadow-rgb: 248, 141, 43;
+}
+
+.btn:focus-visible, .form-control:focus, .form-select:focus, .form-check-input:focus {
+    border-color: var(--enami-turquesa);
+    box-shadow: 0 0 0 .2rem rgba(0, 196, 179, .3);
+}
+
+.form-check-input:checked {
+    background-color: var(--enami-turquesa-oscuro);
+    border-color: var(--enami-turquesa-oscuro);
+}
+
+/* ---- Tarjetas, tablas y alertas ---- */
+.card {
+    border: 1px solid var(--enami-borde);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(83, 88, 95, .06);
+}
+
+.card .h6, .card h2.h6 { color: var(--enami-turquesa-profundo); }
+
+/* Indicadores del inicio: franja turquesa y cifra grande */
+.indicador {
+    border-top: 4px solid var(--enami-turquesa);
+}
+.indicador.acento { border-top-color: var(--enami-naranjo); }
+.indicador .fs-3 { color: var(--enami-turquesa-profundo); font-weight: 800; }
+
+.table {
+    --bs-table-bg: #fff;
+    --bs-table-striped-bg: #FAF8FB;
+    --bs-table-active-bg: var(--enami-turquesa-suave);
+    --bs-table-hover-bg: var(--enami-turquesa-suave);
+}
+
+.table > thead th {
+    background: #fff;
+    color: var(--enami-gris);
+    font-weight: 600;
+    font-size: .82rem;
+    vertical-align: bottom;
+    border-bottom: 2px solid var(--enami-turquesa);
+}
+.table > tbody > tr:last-child > td { border-bottom-color: transparent; }
+.table { border-radius: 8px; overflow: hidden; }
+/* números y fechas en una sola línea, con cifras alineadas */
+.num, .table td.text-end, .table th.text-end { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.alert-info { --bs-alert-bg: var(--enami-turquesa-suave); --bs-alert-border-color: #B3EBE5; --bs-alert-color: var(--enami-turquesa-profundo); }
+.alert-success { --bs-alert-bg: #E6F6EE; --bs-alert-border-color: #BFE6D1; --bs-alert-color: #145A3A; }
+.alert-warning { --bs-alert-bg: var(--enami-naranjo-suave); --bs-alert-border-color: #FAD3AE; --bs-alert-color: #7A3E06; }
+
+.text-bg-primary { background-color: var(--enami-turquesa-oscuro) !important; color: #fff !important; }
+.text-bg-warning { background-color: var(--enami-naranjo) !important; color: #1F2326 !important; }
+.badge { font-weight: 700; letter-spacing: .02em; }
+
+.content { padding-top: 1.25rem; }
+
+h1:focus { outline: none; }
+
+.valid.modified:not([type=checkbox]) { outline: 1px solid #26b050; }
+.invalid { outline: 1px solid #e50000; }
+.validation-message { color: #e50000; }
+
+.blazor-error-boundary {
+    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, #b32121;
+    padding: 1rem 1rem 1rem 3.7rem;
+    color: white;
+}
+
+    .blazor-error-boundary::after {
+        content: "An error has occurred."
+    }
+
+.darker-border-checkbox.form-check-input {
+    border-color: #929292;
+}
+
+.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
+    color: var(--bs-secondary-color);
+    text-align: end;
+}
+
+.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
+    text-align: start;
+}
+/* ---- Inicio de sesión ---- */
+.cuenta-fondo {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background:
+        linear-gradient(180deg, var(--enami-turquesa) 0, var(--enami-turquesa-medio) 42%, var(--enami-fondo) 42%);
+}
+
+.cuenta-tarjeta {
+    width: 100%;
+    max-width: 400px;
+    background: #fff;
+    border: 1px solid var(--enami-borde);
+    border-top: 5px solid var(--enami-naranjo);
+    border-radius: 12px;
+    padding: 32px 28px;
+    box-shadow: 0 12px 32px rgba(0, 86, 79, .18);
+}
+
+/* Nombre de la empresa en texto (el logotipo oficial se puede agregar en wwwroot cuando ENAMI lo entregue) */
+.marca-enami {
+    font-weight: 800;
+    font-size: 2.1rem;
+    line-height: 1;
+    letter-spacing: .04em;
+    color: var(--enami-turquesa-oscuro);
+}
+
+.marca-subtitulo {
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--enami-gris);
+}
+
+/* ---- Ficha precargada y estados ---- */
+.ficha dt { font-weight: 600; color: var(--enami-gris-claro); font-size: .8rem; }
+.ficha dd { margin-bottom: .4rem; }
+.estado { font-size: .75rem; }
+.tabla-compacta td, .tabla-compacta th { padding: .35rem .5rem; font-size: .875rem; }
+.usuario-sesion { font-size: .9rem; color: var(--enami-gris); }
+.usuario-sesion strong { color: var(--enami-texto); }
+
+/* Campos en blanco sobre el fondo gris de la página */
+.form-control, .form-select, .input-group-text { background-color: #fff; }
+.input-group-text { color: var(--enami-gris); }
+.form-control:disabled, .form-select:disabled { background-color: #F7F5F8; }
+
+code { color: var(--enami-turquesa-profundo); }
+
+/* Sprint 5: secciones del formulario configurable y presupuesto (Anexo 1) */
+.seccion-formulario {
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: var(--enami-turquesa-profundo);
+    border-bottom: 1px solid var(--enami-borde);
+    padding: 0 0 .35rem .7rem;
+    margin: 1.75rem 0 .75rem;
+    border-left: 3px solid var(--enami-turquesa);
+    scroll-margin-top: 4.5rem;
+}
+.tabla-presupuesto { min-width: 900px; }
+.tabla-presupuesto td { white-space: nowrap; }
+
+/* ---- Barra superior ---- */
+.contexto-app { color: var(--enami-gris-claro); font-size: .88rem; }
+.avatar {
+    width: 2.1rem; height: 2.1rem; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--enami-turquesa-suave); color: var(--enami-turquesa-profundo);
+    font-weight: 800; font-size: .85rem; flex: none;
+}
+
+/* ---- Títulos de página y tarjetas ---- */
+.content > h1, .content h1.h3 { font-weight: 800; }
+.card-body > h2.h6:first-child { font-size: 1.05rem; margin-bottom: .9rem; }
+
+/* ---- Formulario de solicitud: ancho de lectura, índice de secciones y barra de dictamen ---- */
+.formulario-solicitud { max-width: 1180px; }
+.indice-secciones {
+    display: flex; flex-wrap: wrap; gap: .35rem .5rem;
+    padding: .6rem 0 .2rem;
+}
+.indice-secciones a {
+    font-size: .82rem; font-weight: 600; text-decoration: none;
+    padding: .2rem .65rem; border-radius: 999px;
+    background: var(--enami-turquesa-suave); color: var(--enami-turquesa-profundo);
+}
+.indice-secciones a:hover { background: #CDEFEB; }
+.valor-calculado {
+    font-weight: 700; font-size: 1.05rem; font-variant-numeric: tabular-nums;
+    padding: .3rem 0; color: var(--enami-texto);
+}
+
+/* La barra de dictamen queda pegada abajo mientras se completa el formulario:
+   el resultado y las acciones están siempre a la vista. */
+.barra-dictamen {
+    position: sticky; bottom: 0; z-index: 20;
+    margin: 1.5rem -1.5rem 0; padding: .75rem 1.5rem;
+    background: #fff; border-top: 1px solid var(--enami-borde);
+    box-shadow: 0 -6px 18px rgba(0, 86, 79, .08);
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1.5rem;
+}
+.barra-dictamen .sello {
+    font-weight: 800; letter-spacing: .04em; font-size: .9rem;
+    padding: .3rem .8rem; border-radius: 6px; border: 2px solid currentColor;
+}
+.barra-dictamen .sello.viable { color: #146C43; background: #E6F6EE; }
+.barra-dictamen .sello.no-viable { color: #A52A2A; background: #FCEBEA; }
+.barra-dictamen .sello.pendiente { color: var(--enami-gris); background: var(--enami-fondo); border-style: dashed; font-weight: 700; letter-spacing: 0; }
+.barra-dictamen .cifra { line-height: 1.15; }
+.barra-dictamen .cifra small { display: block; color: var(--enami-gris-claro); font-size: .75rem; }
+.barra-dictamen .cifra strong { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+
+/* Dictamen del cálculo: cabecera con el resultado, como un certificado */
+.dictamen { border: 1px solid var(--enami-borde); border-radius: 10px; background: #fff; overflow: hidden; }
+.dictamen-cabecera {
+    display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+    padding: .9rem 1.25rem; color: #fff;
+}
+.dictamen-cabecera.viable { background: linear-gradient(90deg, #146C43, #1F8A5B); }
+.dictamen-cabecera.no-viable { background: linear-gradient(90deg, #8E2323, #B23A3A); }
+.dictamen-cabecera .veredicto { font-size: 1.35rem; font-weight: 800; letter-spacing: .05em; }
+.dictamen-cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.dictamen-cifras > div { padding: .9rem 1.25rem; border-right: 1px solid var(--enami-borde); border-bottom: 1px solid var(--enami-borde); }
+.dictamen-cifras .etiqueta { font-size: .8rem; color: var(--enami-gris-claro); }
+.dictamen-cifras .valor { font-size: 1.35rem; font-weight: 800; color: var(--enami-turquesa-profundo); font-variant-numeric: tabular-nums; }
+.dictamen-cifras .nota { font-size: .78rem; color: var(--enami-gris-claro); }
+.dictamen-pie { padding: .7rem 1.25rem; font-size: .82rem; color: var(--enami-gris-claro); }
+
+@media (prefers-reduced-motion: no-preference) {
+    .barra-dictamen .sello { transition: background-color .2s, color .2s; }
+}

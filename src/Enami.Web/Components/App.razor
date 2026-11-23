@@ -1,0 +1,40 @@
+@inject IConfiguration Config
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#00C4B3" />
+    <base href="/" />
+    <ResourcePreloader />
+    <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["Enami.Web.styles.css"]" />
+    <ImportMap />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <HeadOutlet />
+</head>
+
+<body>
+    <Routes />
+    <ReconnectModal />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script>
+        // Cierra la sesión tras el tiempo de inactividad configurado (RF-11), aunque la página siga abierta.
+        (function () {
+            var minutos = @Config.GetValue("Seguridad:MinutosInactividad", 30);
+            var t;
+            function reiniciar() {
+                clearTimeout(t);
+                t = setTimeout(function () {
+                    if (location.pathname.indexOf('/cuenta/') !== 0) location.href = '/cuenta/salir?motivo=inactividad';
+                }, minutos * 60000);
+            }
+            ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(function (e) { document.addEventListener(e, reiniciar, { passive: true }); });
+            reiniciar();
+        })();
+    </script>
+</body>
+
+</html>

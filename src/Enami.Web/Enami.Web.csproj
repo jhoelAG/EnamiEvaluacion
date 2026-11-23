@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <UserSecretsId>4474fa18-3189-496f-8e9f-c712e6b39a2b</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Enami.Dominio\Enami.Dominio.csproj" />
+    <ProjectReference Include="..\Enami.Datos\Enami.Datos.csproj" />
+  </ItemGroup>
+
+</Project>

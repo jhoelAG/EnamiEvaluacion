@@ -1,0 +1,739 @@
+@page "/evaluaciones/nueva"
+@page "/evaluaciones/{Id:long}"
+@page "/solicitudes/nueva"
+@page "/solicitudes/{Id:long}"
+@rendermode InteractiveServer
+@inject ServicioSolicitudes Servicio
+@inject ServicioFichas Fichas
+@inject IRepositorioParametros Parametros
+@inject NavigationManager Nav
+@inject AvisoPendiente Pendiente
+
+<PageTitle>@(Id is null ? "Nueva evaluación de proyecto" : _nro) · Evaluación Fomento</PageTitle>
+
+@if (_noEncontrada)
+{
+    <div class="alert alert-warning">La evaluación de proyecto no existe o su rol no tiene acceso a ella.</div>
+    return;
+}
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h1 class="h3 mb-1">@(Id is null ? "Nueva evaluación de proyecto" : $"Evaluación de proyecto {_nro}")</h1>
+        @if (_detalle is not null)
+        {
+            <div class="small text-muted">
+                <EstadoSolicitud Estado="@_detalle.Solicitud.Estado" /> · ingresada el @_detalle.Solicitud.FechaIngreso.ToString("dd-MM-yyyy HH:mm") por @_detalle.Ingeniero
+            </div>
+        }
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="evaluaciones">Volver a la bandeja</a>
+</div>
+
+@if (_avisos.Count > 0)
+{
+    <div class="alert @_claseAviso" role="status">
+        <ul class="mb-0 ps-3">@foreach (var a in _avisos) { <li>@a</li> }</ul>
+    </div>
+}
+
+@if (_detalle is not null)
+{
+    <PanelAprobacion Detalle="_detalle" Usuario="_usuario" Cambio="RecargarAsync" />
+}
+
+<div class="formulario-solicitud">
+        @* 1. Productor y faena *@
+        <div class="card mb-3">
+            <div class="card-body">
+                <h2 class="h6">1. Productor y faena</h2>
+                @if (_editable)
+                {
+                    <div class="row g-2 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label small" for="rut">RUT o nombre del productor</label>
+                            <div class="input-group input-group-sm">
+                                <input id="rut" class="form-control" placeholder="12.345.678-5 o nombre" @bind="_rut" @bind:event="oninput" @onkeyup="EnterRut" />
+                                <button class="btn btn-outline-primary" @onclick="Buscar">Buscar</button>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label small" for="codigo">o código de faena</label>
+                            <div class="input-group input-group-sm">
+                                <input id="codigo" class="form-control" placeholder="12396" @bind="_codigo" @bind:event="oninput" @onkeyup="EnterCodigo" />
+                                <button class="btn btn-outline-primary" @onclick="BuscarCodigo">Buscar</button>
+                            </div>
+                        </div>
+                    </div>
+                    @if (_errorBusqueda is not null)
+                    {
+                        <div class="alert alert-warning py-2 small">@_errorBusqueda</div>
+                    }
+                    @if (_coincidencias.Count > 0)
+                    {
+                        <div class="small text-muted mb-1">@(_coincidencias.Count == 25 ? "Primeras 25 coincidencias" : $"{_coincidencias.Count} coincidencia(s)") con «@_textoBuscado». Elija el productor:</div>
+                        <div class="list-group list-group-flush border rounded mb-3 resultados-busqueda">
+                            @foreach (var c in _coincidencias)
+                            {
+                                <button type="button" class="list-group-item list-group-item-action py-1 small" @onclick="() => ElegirProductor(c.Rut)">
+                                    <strong>@c.Nombre</strong> <span class="text-muted">(@c.Rut)</span>
+                                    · @c.Faenas faena(s)@(c.Comuna is null ? "" : " · " + c.Comuna)
+                                    @if (c.FaenaCoincidente is not null) { <span class="text-muted"> · faena «@c.FaenaCoincidente»</span> }
+                                </button>
+                            }
+                        </div>
+                    }
+                }
+
+                @if (_productor is not null)
+                {
+                    <dl class="row ficha mb-2">
+                        <dt class="col-sm-3">Productor</dt><dd class="col-sm-9">@_productor.Productor.NombreMostrado <span class="text-muted">(@_productor.Productor.Rut)</span></dd>
+                        <dt class="col-sm-3">Tipo</dt><dd class="col-sm-9">@(_productor.Productor.TipoProductor == TiposProductor.Empresa ? "Empresa" : "Persona natural")</dd>
+                        <dt class="col-sm-3">Domicilio</dt><dd class="col-sm-9">@(_productor.Comuna is null ? "—" : $"{_productor.Comuna}, {_productor.Region}")</dd>
+                        <dt class="col-sm-3">Cumplimiento</dt>
+                        <dd class="col-sm-9">
+                            @if (_productor.Productor.NivelCumplimiento == NivelesCumplimiento.AlDia) { <span class="badge text-bg-success">Al día</span> }
+                            else { <span class="badge text-bg-danger">@(_productor.Productor.NivelCumplimiento == NivelesCumplimiento.Moroso ? "Moroso" : "Cobranza judicial")</span> }
+                        </dd>
+                    </dl>
+
+                    @if (_productor.Faenas.Count == 0)
+                    {
+                        <p class="small text-muted">El productor no tiene faenas cargadas.</p>
+                    }
+                    else
+                    {
+                        <table class="table table-sm tabla-compacta align-middle mb-0">
+                            <thead><tr><th></th><th>Código</th><th>Faena</th><th>Oficina</th><th>Padrón</th><th>Elegibilidad</th></tr></thead>
+                            <tbody>
+                                @foreach (var f in _productor.Faenas)
+                                {
+                                    <tr class="@(f.Faena.Id == _datos.IdFaena ? "table-active" : "")">
+                                        <td><input type="radio" class="form-check-input" name="faena" id="faena-@f.Faena.Id" checked="@(f.Faena.Id == _datos.IdFaena)"
+                                                   disabled="@(!_editable)" @onchange="() => ElegirFaena(f)" /></td>
+                                        <td><label for="faena-@f.Faena.Id">@f.Faena.Codigo</label></td>
+                                        <td>@f.Faena.Nombre<div class="small text-muted">@(f.Comuna ?? "")</div></td>
+                                        <td>@(f.Oficina ?? "—")</td>
+                                        <td>@(f.Faena.NroPadron ?? "—")<div class="small text-muted">@(f.Faena.VencimientoPadron?.ToString("dd-MM-yyyy") ?? "")</div></td>
+                                        <td>
+                                            @if (f.Elegible) { <span class="badge text-bg-success">Elegible</span> }
+                                            else { <span class="badge text-bg-danger" title="@string.Join(" ", f.MotivosNoElegible.Select(m => m.Mensaje))">No elegible</span> }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                }
+
+                @if (_faena is not null && !_faena.Elegible)
+                {
+                    <div class="alert alert-danger small mt-3 mb-0">
+                        <strong>La faena seleccionada no es elegible:</strong>
+                        <ul class="mb-0 ps-3">@foreach (var m in _faena.MotivosNoElegible) { <li>@m.Mensaje</li> }</ul>
+                        Puede guardar el borrador, pero la evaluación no podrá enviarse a revisión hasta corregirlo.
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (_faena is not null)
+        {
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h2 class="h6">Entregas y recursos de la faena @_faena.Faena.Codigo</h2>
+                    @if (_produccion is null)
+                    {
+                        <p class="small text-muted">No hay un reporte de recepción de minerales cargado. El administrador lo carga en «Cargar planillas».</p>
+                    }
+                    else if (_produccion.Lotes == 0)
+                    {
+                        <p class="small text-muted">La faena no registra entregas en ENAMI entre @Mes(_produccion.Desde) y @Mes(_produccion.Hasta) (últimos 6 meses del reporte de recepción).</p>
+                    }
+                    else
+                    {
+                        <p class="small text-muted mb-1">Entregas entre @Mes(_produccion.Desde) y @Mes(_produccion.Hasta), según el reporte de recepción. Las leyes se ponderan por el peso seco de cada lote.</p>
+                        <table class="table table-sm tabla-compacta mb-2">
+                            <thead><tr><th>Mes</th><th class="text-end">Lotes</th><th class="text-end">TMS</th><th class="text-end">Ley Cu</th><th class="text-end">Au</th><th class="text-end">Ag</th></tr></thead>
+                            <tbody>
+                                @foreach (var m in _produccion.Meses)
+                                {
+                                    <tr class="@(m.Lotes == 0 ? "text-muted" : "")">
+                                        <td>@Mes(m.Mes)</td><td class="text-end">@m.Lotes</td><td class="text-end">@Formato.Numero(m.Tms, 1)</td>
+                                        <td class="text-end">@(m.TmsConLey > 0 ? Formato.Fijo(m.LeyCuPct, 2) + " %" : "—")</td>
+                                        <td class="text-end">@(m.TmsConLey > 0 ? Formato.Fijo(m.LeyAuGt, 2) : "—")</td>
+                                        <td class="text-end">@(m.TmsConLey > 0 ? Formato.Fijo(m.LeyAgGt, 1) : "—")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr class="fw-semibold">
+                                    <td>Promedio mensual</td><td class="text-end">@_produccion.Lotes</td><td class="text-end">@Formato.Numero(_produccion.TmsPromedioMensual, 1)</td>
+                                    <td class="text-end">@Formato.Fijo(_produccion.LeyCuPct, 2) %</td><td class="text-end">@Formato.Fijo(_produccion.LeyAuGt, 2)</td><td class="text-end">@Formato.Fijo(_produccion.LeyAgGt, 1)</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        <div class="small text-muted">TMS: toneladas métricas secas. Au y Ag en g/t. El promedio divide por 6 meses aunque alguno no tenga entregas.</div>
+                        @if (_editable && _plantilla is not null)
+                        {
+                            <button class="btn btn-link btn-sm p-0 mt-1" @onclick="() => Precargar(true)">Usar el promedio en los datos del proyecto</button>
+                        }
+                    }
+
+                    <h3 class="h6 mt-3 mb-1">Recursos</h3>
+                    @if (_recursos.Count == 0)
+                    {
+                        <p class="small text-muted mb-2">No hay recursos registrados para esta faena.@(_puedeRecursos ? " Regístrelos con el informe técnico o la visita a faena." : "")</p>
+                    }
+                    else
+                    {
+                        <table class="table table-sm tabla-compacta mb-2">
+                            <thead><tr><th>Categoría</th><th class="text-end">Toneladas</th><th class="text-end">Ley Cu</th><th class="text-end">Au g/t</th><th class="text-end">Ag g/t</th><th>Fuente</th><th></th></tr></thead>
+                            <tbody>
+                                @foreach (var r in _recursos)
+                                {
+                                    <tr>
+                                        <td>@CategoriasRecurso.Nombre(r.Categoria)</td><td class="text-end">@Formato.Numero((double)r.Toneladas, 0)</td>
+                                        <td class="text-end">@Formato.Fijo((double)r.LeyCuPct, 2) %</td><td class="text-end">@Formato.Fijo((double)r.LeyAuGt, 2)</td>
+                                        <td class="text-end">@Formato.Fijo((double)r.LeyAgGt, 1)</td>
+                                        <td class="small">@(r.Fuente ?? "—")<div class="text-muted">@r.FechaRegistro.ToString("dd-MM-yyyy")</div></td>
+                                        <td class="text-end">@if (_puedeRecursos) { <button class="btn btn-link btn-sm text-danger p-0" title="Eliminar" @onclick="() => EliminarRecurso(r.Id)">Eliminar</button> }</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end">@Formato.Numero((double)_recursos.Sum(r => r.Toneladas), 0)</td><td colspan="5"></td></tr></tfoot>
+                        </table>
+                    }
+                    @if (_puedeRecursos)
+                    {
+                        <div class="row g-2 align-items-end">
+                            <div class="col-6 col-md-2">
+                                <label class="form-label small mb-0" for="rec-cat">Categoría</label>
+                                <select id="rec-cat" class="form-select form-select-sm" @bind="_recurso.Categoria">
+                                    @foreach (var c in CategoriasRecurso.Todas) { <option value="@c">@CategoriasRecurso.Nombre(c)</option> }
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <label class="form-label small mb-0" for="rec-t">Toneladas</label>
+                                <input id="rec-t" type="number" min="1" step="1" class="form-control form-control-sm" @bind="_recurso.Toneladas" />
+                            </div>
+                            <div class="col-4 col-md-2">
+                                <label class="form-label small mb-0" for="rec-cu">Ley Cu %</label>
+                                <input id="rec-cu" type="number" min="0" step="any" class="form-control form-control-sm" @bind="_recurso.LeyCuPct" />
+                            </div>
+                            <div class="col-4 col-md-1">
+                                <label class="form-label small mb-0" for="rec-au">Au g/t</label>
+                                <input id="rec-au" type="number" min="0" step="any" class="form-control form-control-sm" @bind="_recurso.LeyAuGt" />
+                            </div>
+                            <div class="col-4 col-md-1">
+                                <label class="form-label small mb-0" for="rec-ag">Ag g/t</label>
+                                <input id="rec-ag" type="number" min="0" step="any" class="form-control form-control-sm" @bind="_recurso.LeyAgGt" />
+                            </div>
+                            <div class="col-8 col-md-2">
+                                <label class="form-label small mb-0" for="rec-f">Fuente</label>
+                                <input id="rec-f" maxlength="100" class="form-control form-control-sm" placeholder="Informe técnico, visita…" @bind="_recurso.Fuente" />
+                            </div>
+                            <div class="col-4 col-md-2">
+                                <button class="btn btn-outline-primary btn-sm w-100" @onclick="GuardarRecurso">Guardar</button>
+                            </div>
+                        </div>
+                        <div class="form-text">Si la categoría ya está registrada, se reemplaza.</div>
+                        @if (_errorRecurso is not null) { <div class="alert alert-danger py-2 small mt-2 mb-0">@_errorRecurso</div> }
+                    }
+                </div>
+            </div>
+        }
+
+        @* 2. Crédito *@
+        <div class="card mb-3">
+            <div class="card-body">
+                <h2 class="h6">2. Crédito solicitado</h2>
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label class="form-label small" for="instrumento">Instrumento de fomento</label>
+                        <select id="instrumento" class="form-select form-select-sm" value="@_datos.IdInstrumento" @onchange="CambiarInstrumento" disabled="@(!_editable)">
+                            <option value="">Seleccione…</option>
+                            @foreach (var i in _instrumentos)
+                            {
+                                <option value="@i.Id">@i.Nombre@(i.Activo ? "" : " (desactivado)")</option>
+                            }
+                        </select>
+                        @if (_datos.IdInstrumento is not null)
+                        {
+                            <div class="form-text">@(_plantilla is null ? "El instrumento no tiene fórmulas vigentes: la Jefatura debe activarlas en el editor de fórmulas." : $"Fórmulas del instrumento, versión {_plantilla.Version}")</div>
+                        }
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small" for="monto">Monto solicitado (US$)</label>
+                        <input id="monto" type="number" min="1" step="1" class="form-control form-control-sm" @bind="_datos.MontoSolicitado" disabled="@(!_editable || MontoDelPresupuesto)" />
+                        @if (MontoDelPresupuesto)
+                        {
+                            <div class="form-text">Capital de riesgo más crédito del presupuesto.</div>
+                        }
+                        @if (_dolar is double dolar && _datos.MontoSolicitado is decimal monto && monto > 0)
+                        {
+                            <div class="form-text">≈ @Formato.Pesos((double)monto * dolar) al dólar de @Formato.Pesos(dolar) (<a href="mercado" target="_blank">ver o corregir</a>)</div>
+                        }
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small" for="plazo">Plazo (meses)</label>
+                        <input id="plazo" type="number" min="1" max="@ServicioSolicitudes.PlazoMaximo" step="1" class="form-control form-control-sm" @bind="_datos.PlazoMeses" disabled="@(!_editable)" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* 3. Datos del proyecto: secciones y campos definidos en la plantilla (configurables en el editor de fórmulas) *@
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h2 class="h6 mb-0">3. Datos del proyecto</h2>
+                    @if (_plantilla is not null && _editable)
+                    {
+                        <div class="d-flex gap-3">
+                            @if (_faena is not null)
+                            {
+                                <button class="btn btn-link btn-sm p-0" @onclick="() => Precargar(true)">Volver a precargar desde la faena</button>
+                            }
+                            <button class="btn btn-link btn-sm p-0" @onclick="UsarReferencias">Completar con valores de referencia</button>
+                        </div>
+                    }
+                </div>
+                @if (_plantilla is null)
+                {
+                    <p class="small text-muted mt-2 mb-0">Seleccione el instrumento de fomento para cargar su formulario.</p>
+                }
+                else
+                {
+                    var secciones = Secciones(_plantilla).ToList();
+                    @if (secciones.Count > 2)
+                    {
+                        <nav class="indice-secciones" aria-label="Secciones del formulario">
+                            @for (int i = 0; i < secciones.Count; i++)
+                            {
+                                <a href="@($"{Nav.ToBaseRelativePath(Nav.Uri).Split('#')[0]}#seccion-{i}")">@(string.IsNullOrEmpty(secciones[i].Key) ? "Otros datos" : secciones[i].Key)</a>
+                            }
+                        </nav>
+                    }
+                    @for (int n = 0; n < secciones.Count; n++)
+                    {
+                        var seccion = secciones[n];
+                        <h3 class="seccion-formulario" id="seccion-@n">@(string.IsNullOrEmpty(seccion.Key) ? "Otros datos" : seccion.Key)</h3>
+                        @if (seccion.Any(v => FuentesCampo.EsCalculada(v.Fuente)))
+                        {
+                            <EditorPresupuesto Lineas="_datos.Presupuesto" Labores="_labores" Editable="_editable" TasaTimbres="_tasaTimbres" Cambio="RecalcularPresupuesto" />
+                        }
+                        <div class="row g-2">
+                            @foreach (var v in seccion)
+                            {
+                                var calculada = FuentesCampo.EsCalculada(v.Fuente);
+                                <div class="@(v.Tipo == TiposCampo.TextoLargo ? "col-12" : "col-md-6")">
+                                    <label class="form-label small mb-0" for="p-@v.Codigo">@v.Nombre@(_obligatorias.Contains(v.Codigo) ? " *" : "")</label>
+                                    @if (v.Tipo == TiposCampo.TextoLargo)
+                                    {
+                                        <textarea id="p-@v.Codigo" class="form-control form-control-sm" rows="3" maxlength="2000" @bind="_datos.Textos[v.Codigo]" disabled="@(!_editable)"></textarea>
+                                    }
+                                    else if (v.Tipo == TiposCampo.Texto)
+                                    {
+                                        <input id="p-@v.Codigo" class="form-control form-control-sm" maxlength="2000" @bind="_datos.Textos[v.Codigo]" disabled="@(!_editable)" />
+                                    }
+                                    else if (v.Tipo == TiposCampo.Seleccion)
+                                    {
+                                        <select id="p-@v.Codigo" class="form-select form-select-sm" value="@_datos.DatosProyecto.GetValueOrDefault(v.Codigo)?.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                                @onchange="e => ElegirOpcion(v.Codigo, e)" disabled="@(!_editable)">
+                                            <option value="">Seleccione…</option>
+                                            @foreach (var (valor, texto) in v.ListaOpciones())
+                                            {
+                                                <option value="@valor.ToString(System.Globalization.CultureInfo.InvariantCulture)">@texto</option>
+                                            }
+                                        </select>
+                                    }
+                                    else if (calculada)
+                                    {
+                                        <div class="valor-calculado" id="p-@v.Codigo">
+                                            @(_datos.DatosProyecto.GetValueOrDefault(v.Codigo) is double vc ? (v.Unidad == "US$" ? Formato.Dolares(vc) : Formato.Numero(vc) + " " + v.Unidad) : "—")
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="input-group input-group-sm">
+                                            <input id="p-@v.Codigo" type="number" step="any" class="form-control" @bind="_datos.DatosProyecto[v.Codigo]"
+                                                   disabled="@(!_editable)" placeholder="@("Ref.: " + Formato.Numero(v.ValorPorDefecto))" />
+                                            @if (!string.IsNullOrEmpty(v.Unidad)) { <span class="input-group-text">@v.Unidad</span> }
+                                        </div>
+                                    }
+                                    @if (calculada)
+                                    {
+                                        <div class="form-text">Se calcula con el presupuesto.</div>
+                                    }
+                                    else if (_precargadas.TryGetValue(v.Codigo, out var origen))
+                                    {
+                                        <div class="form-text">@origen</div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                    <div class="small text-muted mt-4">
+                        Los campos con * son necesarios para calcular; el resto es informativo.
+                        @if (_plantilla.Modo == ModoCalculo.Flujo)
+                        {
+                            <text>La inversión y el plazo del cálculo son el monto y el plazo solicitados. </text>
+                        }
+                        Los precios, el dólar, las tasas y la tarifa de compra se toman del último valor registrado (ver <a href="variables">Variables</a>).
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (!_editable && _detalle is not null)
+        {
+            <p class="small text-muted">La evaluación está en estado @_detalle.Solicitud.Estado.ToLowerInvariant().Replace('_', ' ') y no se puede modificar desde aquí.</p>
+        }
+
+        @if (_resultado is not null && _plantillaResultado is not null)
+        {
+            <div id="resultado" class="pt-2" style="scroll-margin-top: 4.5rem">
+                @if (_resultado.Exitoso)
+                {
+                    <h2 class="h4 mb-3">Resultado del cálculo</h2>
+                    <p class="small text-muted">@_origenResultado</p>
+                    <ResultadoVan Resultado="_resultado" Plantilla="_plantillaResultado" />
+                }
+                else
+                {
+                    <div class="alert alert-danger">
+                        <strong>No se pudo calcular:</strong>
+                        <ul class="mb-0">@foreach (var e in _resultado.Errores) { <li>@e</li> }</ul>
+                    </div>
+                }
+            </div>
+        }
+
+        @* Barra fija al pie: dictamen y acciones siempre a la vista mientras se completa el formulario *@
+        <div class="barra-dictamen" role="region" aria-label="Dictamen y acciones">
+            <div class="d-flex align-items-center flex-wrap gap-3">
+                @if (_resultado is { Exitoso: true } res)
+                {
+                    <span class="sello @(res.Viable ? "viable" : "no-viable")">@(res.Viable ? "VIABLE" : "NO VIABLE")</span>
+                    @if (res.Modo == ModoCalculo.Escenarios)
+                    {
+                        <span class="cifra"><small>Recuperación</small><strong>@Formato.Dolares(res.Recuperacion)</strong></span>
+                    }
+                    <span class="cifra"><small>VAN</small><strong>@Formato.Dolares(res.Van)</strong></span>
+                    <a class="small" href="@($"{Nav.ToBaseRelativePath(Nav.Uri).Split('#')[0]}#resultado")">Ver el detalle</a>
+                }
+                else
+                {
+                    <span class="sello pendiente">Sin calcular</span>
+                    <span class="small text-muted">@(_plantilla is null ? "Elija la faena y el instrumento." : "Complete los campos con * y calcule para ver el dictamen.")</span>
+                }
+            </div>
+            @if (_editable)
+            {
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary" @onclick="Simular" disabled="@_ocupado">Calcular sin guardar</button>
+                    <button class="btn btn-primary" @onclick="Guardar" disabled="@_ocupado">Guardar borrador</button>
+                </div>
+            }
+        </div>
+    </div>
+
+@code {
+    [Parameter] public long? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> Estado { get; set; } = default!;
+
+    private UsuarioSesion _usuario = default!;
+    private SolicitudDetalle? _detalle;
+    private DatosSolicitud _datos = new();
+    private IReadOnlyList<InstrumentoFomento> _instrumentos = [];
+    private FichaProductor? _productor;
+    private FichaFaena? _faena;
+    private PlantillaCalculo? _plantilla, _plantillaResultado;
+    private ResultadoEvaluacion? _resultado;
+    private bool _resultadoGuardado, _editable, _noEncontrada, _ocupado;
+    private string _origenResultado = "";
+    private string _rut = "", _codigo = "", _nro = "";
+    private string? _errorBusqueda;
+    private List<string> _avisos = [];
+    private string _claseAviso = "alert-info";
+    private readonly Dictionary<string, string> _precargadas = new(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyList<CoincidenciaProductor> _coincidencias = [];
+    private string _textoBuscado = "";
+    private HistorialProduccion? _produccion;
+    private IReadOnlyList<RecursoFaena> _recursos = [];
+    private DatosRecurso _recurso = new();
+    private string? _errorRecurso;
+    private bool _puedeRecursos;
+    private double? _dolar;
+    private IReadOnlyList<LaborTarifada> _labores = [];
+    private HashSet<string> _obligatorias = new(StringComparer.OrdinalIgnoreCase);
+    private decimal _tasaTimbres;
+
+    /// <summary>En las plantillas con presupuesto (Anexo 1), el monto es lo que financia ENAMI según las actividades.</summary>
+    private bool MontoDelPresupuesto => ServicioSolicitudes.UsaPresupuesto(_plantilla) && _datos.Presupuesto.Count > 0;
+
+    /// <summary>Campos de la plantilla agrupados por sección, en el orden en que aparece cada sección.</summary>
+    private static IEnumerable<IGrouping<string, VariableCalculo>> Secciones(PlantillaCalculo p) =>
+        ServicioSolicitudes.CamposFormulario(p).GroupBy(v => v.Seccion ?? "");
+
+    private static string Mes(DateTime d) => d.ToString("MMM yyyy", Formato.Chile);
+
+    /// <summary>Vuelve a leer la evaluación (después de enviarla a revisión o de una decisión).</summary>
+    private Task RecargarAsync() => OnParametersSetAsync();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _usuario = await Estado.UsuarioAsync();
+        _instrumentos = Servicio.Instrumentos();
+        _labores = Servicio.Labores();
+        _puedeRecursos = _usuario.Rol is Roles.Ingeniero or Roles.JefeOficina or Roles.Administrador;
+        _dolar = Parametros.Ultimos().TryGetValue("Dolar", out var dolar) ? dolar.Valor : null;
+        if (Id is null)
+        {
+            _editable = _usuario.Rol is Roles.Ingeniero or Roles.Administrador;
+            if (!_editable) _avisos = ["Solo un Ingeniero de Fomento puede registrar evaluaciones de proyecto."];
+            return;
+        }
+        _detalle = Servicio.Obtener(Id.Value, _usuario);
+        if (_detalle is null) { _noEncontrada = true; return; }
+        _instrumentos = Servicio.Instrumentos(_detalle.Solicitud.IdInstrumento);
+        if (Pendiente.Tomar(out var avisos, out var clase)) Avisar(avisos, clase);
+        var s = _detalle.Solicitud;
+        _nro = s.NroSolicitud;
+        _editable = Servicio.PuedeEditar(s, _usuario);
+        _productor = _detalle.Productor;
+        _faena = _detalle.Faena;
+        CargarFaena();
+        _rut = _productor.Productor.Rut;
+        _datos = _detalle.Datos;
+        CargarPlantilla();
+        // al abrir una solicitud con los datos completos se muestra su resultado con los valores de mercado vigentes
+        if (_detalle.UltimoResultado is ResultadoGuardado g && _plantilla is not null)
+        {
+            try
+            {
+                _resultado = Servicio.Simular(_datos);
+                _plantillaResultado = _plantilla;
+                _origenResultado = $"Último cálculo guardado el {g.Fecha:dd-MM-yyyy HH:mm}; aquí se muestra recalculado con los valores de mercado vigentes.";
+            }
+            catch (ErrorNegocio) { _resultado = null; }
+        }
+    }
+
+    private void ElegirOpcion(string codigo, ChangeEventArgs e) =>
+        _datos.DatosProyecto[codigo] = double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var x) ? x : null;
+
+    /// <summary>Recalcula los totales del presupuesto y los campos que salen de él.</summary>
+    private void RecalcularPresupuesto()
+    {
+        if (_plantilla is null) return;
+        try { Servicio.AplicarPresupuesto(_plantilla, _datos); }
+        catch (ErrorNegocio) { /* mientras se edita puede haber filas incompletas: el error se informa al guardar o calcular */ }
+    }
+
+    private async Task EnterRut(KeyboardEventArgs e) { if (e.Key == "Enter") { await Task.Yield(); Buscar(); } }
+
+    /// <summary>Si el texto tiene números se busca como RUT; si no, por nombre del productor o de la faena.</summary>
+    private void Buscar()
+    {
+        _coincidencias = [];
+        if (_rut.Any(char.IsDigit)) { BuscarRut(); return; }
+        _errorBusqueda = null;
+        _textoBuscado = _rut.Trim();
+        if (_textoBuscado.Length < 3) { _errorBusqueda = "Escriba el RUT o al menos 3 letras del nombre."; return; }
+        _coincidencias = Fichas.BuscarPorNombre(_textoBuscado);
+        if (_coincidencias.Count == 0) _errorBusqueda = $"No hay productores ni faenas con «{_textoBuscado}» en el nombre.";
+        else if (_coincidencias.Count == 1) ElegirProductor(_coincidencias[0].Rut);
+    }
+
+    private void ElegirProductor(string rut)
+    {
+        _coincidencias = [];
+        _rut = rut;
+        BuscarRut();
+    }
+    private async Task EnterCodigo(KeyboardEventArgs e) { if (e.Key == "Enter") { await Task.Yield(); BuscarCodigo(); } }
+
+    private void BuscarRut()
+    {
+        _errorBusqueda = null;
+        if (ReglasRut(_rut) is string error) { _errorBusqueda = error; return; }
+        _productor = Fichas.BuscarProductor(_rut);
+        _faena = null;
+        _produccion = null;
+        _datos.IdFaena = null;
+        if (_productor is null) { _errorBusqueda = $"No existe un productor con RUT {_rut}. Revise el RUT o pida al administrador que cargue la ficha."; return; }
+        _rut = _productor.Productor.Rut;
+        if (_productor.Faenas.Count == 1) ElegirFaena(_productor.Faenas[0]);
+    }
+
+    private void BuscarCodigo()
+    {
+        _errorBusqueda = null;
+        _coincidencias = [];
+        var r = Fichas.BuscarFaena(_codigo);
+        if (r is null) { _errorBusqueda = $"No existe una faena con código {_codigo}."; return; }
+        _productor = r.Value.Productor;
+        _rut = _productor.Productor.Rut;
+        ElegirFaena(r.Value.Faena);
+    }
+
+    private static string? ReglasRut(string rut)
+    {
+        var n = Enami.Dominio.Importacion.ReglasCalidad.NormalizarRut(rut);
+        if (!Enami.Dominio.Importacion.ReglasCalidad.RutConFormatoValido(n)) return "Ingrese un RUT con dígito verificador, por ejemplo 12.345.678-5.";
+        return null;
+    }
+
+    private void ElegirFaena(FichaFaena f)
+    {
+        _faena = f;
+        _datos.IdFaena = f.Faena.Id;
+        _codigo = f.Faena.Codigo;
+        CargarFaena();
+        Precargar(false);
+    }
+
+    private void CargarFaena()
+    {
+        if (_faena is null) return;
+        _produccion = Fichas.Produccion(_faena.Faena.Id);
+        _recursos = Fichas.Recursos(_faena.Faena.Id);
+        _recurso = new DatosRecurso();
+        _errorRecurso = null;
+    }
+
+    private void GuardarRecurso()
+    {
+        if (_faena is null) return;
+        try
+        {
+            Fichas.GuardarRecurso(_faena.Faena.Id, _recurso, _usuario);
+            _recursos = Fichas.Recursos(_faena.Faena.Id);
+            _recurso = new DatosRecurso();
+            _errorRecurso = null;
+            Precargar(false);
+        }
+        catch (ErrorNegocio ex) { _errorRecurso = ex.Message; }
+    }
+
+    private void EliminarRecurso(int id)
+    {
+        if (_faena is null) return;
+        try { Fichas.EliminarRecurso(id, _usuario); _recursos = Fichas.Recursos(_faena.Faena.Id); }
+        catch (ErrorNegocio ex) { _errorRecurso = ex.Message; }
+    }
+
+    /// <summary>
+    /// Precarga los campos que tienen fuente en la plantilla (recepción de los últimos 6 meses, recursos y ficha de la faena).
+    /// Sin <paramref name="reemplazar"/>, solo completa los campos vacíos.
+    /// </summary>
+    private void Precargar(bool reemplazar)
+    {
+        if (_plantilla is null || _faena is null || !_editable) return;
+        foreach (var (codigo, p) in Servicio.Precarga(_plantilla, _faena.Faena.Id, _usuario.NombreCompleto))
+        {
+            if (p.Texto is not null)
+            {
+                if (!reemplazar && !string.IsNullOrWhiteSpace(_datos.Textos.GetValueOrDefault(codigo))) continue;
+                _datos.Textos[codigo] = p.Texto;
+            }
+            else
+            {
+                if (!reemplazar && _datos.DatosProyecto.GetValueOrDefault(codigo) is not null) continue;
+                _datos.DatosProyecto[codigo] = p.Valor;
+            }
+            _precargadas[codigo] = p.Origen;
+        }
+    }
+
+    private void CambiarInstrumento(ChangeEventArgs e)
+    {
+        _datos.IdInstrumento = byte.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        CargarPlantilla();
+        Precargar(false);
+        _resultado = null;
+    }
+
+    private void CargarPlantilla()
+    {
+        _plantilla = _datos.IdInstrumento is byte i ? Servicio.PlantillaPara(i) : null;
+        if (_plantilla is null) return;
+        _tasaTimbres = Servicio.TasaTimbres(_plantilla);
+        _obligatorias = ServicioSolicitudes.VariablesObligatorias(_plantilla).Select(v => v.Codigo).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var v in ServicioSolicitudes.CamposFormulario(_plantilla))
+            if (v.EsNumerica) _datos.DatosProyecto.TryAdd(v.Codigo, null);
+            else _datos.Textos.TryAdd(v.Codigo, null);
+        RecalcularPresupuesto();
+    }
+
+    private void UsarReferencias()
+    {
+        if (_plantilla is null) return;
+        foreach (var v in ServicioSolicitudes.VariablesProyecto(_plantilla))
+            if (_datos.DatosProyecto.GetValueOrDefault(v.Codigo) is null) _datos.DatosProyecto[v.Codigo] = v.ValorPorDefecto;
+        // presupuesto de referencia: el del ejemplo de ENAMI (sondajes, análisis, gastos legales, galería y rampa con crédito)
+        if (ServicioSolicitudes.UsaPresupuesto(_plantilla) && _datos.Presupuesto.Count == 0)
+        {
+            void Agregar(string nombre, string programa, decimal cantidad)
+            {
+                var l = _labores.FirstOrDefault(x => x.Nombre == nombre);
+                if (l is not null)
+                    _datos.Presupuesto.Add(new DatosLineaPresupuesto
+                    {
+                        IdLabor = l.Id, Programa = programa, Cantidad = cantidad, CostoUnitario = l.CostoUnitario,
+                        PorcentajeFinanciamiento = CalculoPresupuesto.FraccionPorDefecto(programa, l)
+                    });
+            }
+            Agregar("Sondajes", ProgramasPresupuesto.Reconocimiento, 1000);
+            Agregar("Análisis químico", ProgramasPresupuesto.Reconocimiento, 25);
+            Agregar("Gastos notariales y legales", ProgramasPresupuesto.Propio, 1000);
+            Agregar("Galerías 2,5 x 2,5", ProgramasPresupuesto.Desarrollo, 20);
+            Agregar("Rampas 4,0 x 4,0", ProgramasPresupuesto.Desarrollo, 50);
+            RecalcularPresupuesto();
+        }
+        _datos.MontoSolicitado ??= (decimal)(_plantilla.Variables.FirstOrDefault(v => v.Codigo == MotorFormulas.CodigoInversion)?.ValorPorDefecto ?? 0);
+        _datos.PlazoMeses ??= (short)(_plantilla.Variables.FirstOrDefault(v => v.Codigo == MotorFormulas.CodigoPlazo)?.ValorPorDefecto ?? 12);
+    }
+
+    private void Simular()
+    {
+        _avisos = [];
+        try
+        {
+            _resultado = Servicio.Simular(_datos);
+            _plantillaResultado = _plantilla;
+            _resultadoGuardado = false;
+            _origenResultado = "Vista previa: este cálculo no se ha guardado.";
+        }
+        catch (ErrorNegocio ex) { Avisar([ex.Message], "alert-danger"); _resultado = null; }
+    }
+
+    private void Guardar()
+    {
+        _ocupado = true;
+        try
+        {
+            var r = Servicio.GuardarBorrador(Id, _datos, _usuario);
+            var avisos = new List<string> { $"Evaluación {r.NroSolicitud} guardada como borrador." };
+            avisos.AddRange(r.Avisos);
+            Avisar(avisos, r.Avisos.Count == 0 ? "alert-success" : "alert-warning");
+            _resultado = r.Calculo;
+            _plantillaResultado = _plantilla;
+            _resultadoGuardado = r.Calculo?.Exitoso == true;
+            _origenResultado = "Cálculo guardado con la evaluación.";
+            if (Id is null)
+            {
+                Pendiente.Dejar(_avisos, _claseAviso);
+                Nav.NavigateTo($"evaluaciones/{r.IdSolicitud}", replace: true);
+            }
+            else _detalle = Servicio.Obtener(r.IdSolicitud, _usuario);
+        }
+        catch (ErrorNegocio ex) { Avisar([ex.Message], "alert-danger"); }
+        finally { _ocupado = false; }
+    }
+
+    private void Avisar(List<string> avisos, string clase) { _avisos = avisos; _claseAviso = clase; }
+}

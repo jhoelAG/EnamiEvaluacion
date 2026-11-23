@@ -1,0 +1,127 @@
+@* Dictamen y detalle de un cálculo exitoso: por flujo de caja (VAN mensual) o por escenarios de precio (Anexo 2). *@
+<section class="dictamen mb-4" aria-label="Dictamen">
+    <div class="dictamen-cabecera @(Resultado.Viable ? "viable" : "no-viable")">
+        <div>
+            <div class="small opacity-75">Dictamen</div>
+            <div class="veredicto">@(Resultado.Viable ? "Viable" : "No viable")</div>
+        </div>
+        <div class="text-end small opacity-75">@Resultado.Plantilla<br />versión @Resultado.VersionPlantilla de las fórmulas</div>
+    </div>
+    <div class="dictamen-cifras">
+        @if (Resultado.Modo == ModoCalculo.Escenarios)
+        {
+            <div><div class="etiqueta">Recuperación esperada del fomento</div><div class="valor">@Formato.Dolares(Resultado.Recuperacion)</div>
+                <div class="nota">@Formato.Numero(Resultado.Inversion == 0 ? 0 : Resultado.Recuperacion / Resultado.Inversion * 100, 0) % de @Formato.Dolares(Resultado.Inversion) financiados</div></div>
+            <div><div class="etiqueta">VAN del proyecto</div><div class="valor">@Formato.Dolares(Resultado.Van)</div>
+                @if (Dolar is double d1) { <div class="nota">@Formato.Pesos(Resultado.Van * d1)</div> }</div>
+            <div><div class="etiqueta">Precio proyectado</div><div class="valor">@Formato.Numero(Resultado.PrecioProyectado, 1)</div><div class="nota">@Resultado.UnidadPrecio</div></div>
+            <div><div class="etiqueta">Precio crítico operacional</div><div class="valor">@Precio(Resultado.PrecioCritico)</div><div class="nota">la utilidad llega a cero</div></div>
+            <div><div class="etiqueta">Precio mínimo de retorno</div><div class="valor">@Precio(Resultado.PrecioMinimoRetorno)</div><div class="nota">la capacidad de pago cubre el financiamiento</div></div>
+        }
+        else
+        {
+            <div><div class="etiqueta">VAN</div><div class="valor">@Formato.Dolares(Resultado.Van)</div>
+                @if (Dolar is double d2) { <div class="nota">@Formato.Pesos(Resultado.Van * d2)</div> }</div>
+            <div><div class="etiqueta">IVAN</div><div class="valor">@Formato.Numero(Resultado.Ivan, 3)</div><div class="nota">VAN por cada dólar invertido</div></div>
+            <div><div class="etiqueta">Inversión</div><div class="valor">@Formato.Dolares(Resultado.Inversion)</div></div>
+        }
+    </div>
+    <div class="dictamen-pie">
+        @(Resultado.Modo == ModoCalculo.Escenarios ? "Es viable si la recuperación cubre el financiamiento de ENAMI y el VAN no es negativo." : "Es viable si el VAN no es negativo.")
+        Montos en US$@(Dolar is double d3 ? $"; pesos al dólar observado de {Formato.Pesos(d3)}" : "").
+    </div>
+</section>
+
+@if (Resultado.Modo == ModoCalculo.Escenarios)
+{
+    <h2 class="h5">Escenarios de precio</h2>
+    <div class="table-responsive">
+        <table class="table table-sm tabla-compacta">
+            <thead>
+                <tr>
+                    <th>Precio<div class="small text-muted fw-normal">@Resultado.UnidadPrecio</div></th>
+                    @foreach (var (codigo, titulo) in ColumnasEscenario)
+                    {
+                        <th class="text-end">@titulo</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var e in Resultado.Escenarios)
+                {
+                    <tr class="@(e.EsProyectado ? "fw-semibold table-active" : "")">
+                        <td>@Formato.Numero(e.Precio, 1)@(e.EsProyectado ? " (proyectado)" : "")</td>
+                        @foreach (var (codigo, _) in ColumnasEscenario)
+                        {
+                            <td class="text-end">@Formato.Numero(e.ValoresFormulas.GetValueOrDefault(codigo), 0)</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="small text-muted mb-3">Ingreso, costo, utilidad y excedente en US$/TMS; capacidad de pago, recuperación y VAN en US$.</div>
+
+    <h2 class="h5 mt-4">Cálculos al precio proyectado</h2>
+    <table class="table table-sm">
+        <tbody>
+            @foreach (var f in Plantilla.Formulas)
+            {
+                <tr>
+                    <td>@f.Nombre<div class="small text-muted"><code>@f.Codigo = @f.Expresion</code></div></td>
+                    <td class="text-end text-nowrap">@Formato.Numero(Resultado.Escenarios[^1].ValoresFormulas.GetValueOrDefault(f.Codigo), 4)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else
+{
+    <h2 class="h6">Fórmulas en el período 1</h2>
+    <table class="table table-sm">
+        <tbody>
+            @foreach (var f in Plantilla.Formulas)
+            {
+                <tr>
+                    <td>@f.Nombre<div class="small text-muted"><code>@f.Codigo = @f.Expresion</code></div></td>
+                    <td class="text-end">@Formato.Numero(Resultado.Periodos[0].ValoresFormulas.GetValueOrDefault(f.Codigo), 4)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <h2 class="h6">Flujo de caja</h2>
+    <div style="max-height: 320px; overflow-y: auto;">
+        <table class="table table-sm table-striped">
+            <thead class="sticky-top bg-white"><tr><th>Período</th><th class="text-end">Flujo</th><th class="text-end">Factor</th><th class="text-end">Flujo actualizado</th></tr></thead>
+            <tbody>
+                <tr><td>0</td><td class="text-end">@Formato.Dolares(-Resultado.Inversion)</td><td class="text-end">1</td><td class="text-end">@Formato.Dolares(-Resultado.Inversion)</td></tr>
+                @foreach (var p in Resultado.Periodos)
+                {
+                    <tr>
+                        <td>@p.Periodo</td>
+                        <td class="text-end">@Formato.Dolares(p.Flujo)</td>
+                        <td class="text-end">@Formato.Numero(p.FactorDescuento, 4)</td>
+                        <td class="text-end">@Formato.Dolares(p.FlujoActualizado)</td>
+                    </tr>
+                }
+                <tr class="fw-bold"><td colspan="3">VAN</td><td class="text-end">@Formato.Dolares(Resultado.Van)</td></tr>
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public ResultadoEvaluacion Resultado { get; set; } = default!;
+    [Parameter, EditorRequired] public PlantillaCalculo Plantilla { get; set; } = default!;
+
+    /// <summary>Columnas de la tabla de escenarios: solo las fórmulas que la plantilla tiene.</summary>
+    private IEnumerable<(string Codigo, string Titulo)> ColumnasEscenario =>
+        new[] { ("Ingreso", "Ingreso"), ("CostoTotal", "Costo"), ("Utilidad", "Utilidad"), ("Excedente", "Excedente"),
+                ("CapacidadPago", "Capacidad de pago"), ("Recuperacion", "Recuperación"), ("VanProyecto", "VAN") }
+            .Where(c => Plantilla.Formulas.Any(f => f.Codigo.Equals(c.Item1, StringComparison.OrdinalIgnoreCase)));
+
+    private double? Dolar => Resultado.Entradas.TryGetValue("Dolar", out var d) && d > 0 ? d : null;
+
+    private string Precio(double? p) => p is double x ? $"{Formato.Numero(x, 1)} {Resultado.UnidadPrecio}" : "—";
+}

@@ -1,0 +1,56 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "urlApi": {
+        "type": "String",
+        "defaultValue": "https://enami-api-TU-NOMBRE.azurewebsites.net"
+      },
+      "claveApi": {
+        "type": "SecureString",
+        "defaultValue": "PEGA-AQUI-LA-CLAVE-DE-ClaveApiRobots"
+      }
+    },
+    "triggers": {
+      "Todos_los_dias_a_las_9": {
+        "type": "Recurrence",
+        "recurrence": {
+          "frequency": "Day",
+          "interval": 1,
+          "timeZone": "Pacific SA Standard Time",
+          "schedule": { "hours": [ "9" ], "minutes": [ 0 ] }
+        }
+      }
+    },
+    "actions": {
+      "Consultar_indicadores": {
+        "type": "Http",
+        "inputs": { "method": "GET", "uri": "https://mindicador.cl/api" },
+        "runAfter": {}
+      },
+      "Registrar_dolar": {
+        "type": "Http",
+        "inputs": {
+          "method": "POST",
+          "uri": "@{parameters('urlApi')}/api/variables/Dolar",
+          "headers": { "Content-Type": "application/json", "X-Api-Key": "@parameters('claveApi')" },
+          "body": { "valor": "@body('Consultar_indicadores')?['dolar']?['valor']", "fuente": "API_BCCH" }
+        },
+        "runAfter": { "Consultar_indicadores": [ "Succeeded" ] }
+      },
+      "Registrar_cobre": {
+        "type": "Http",
+        "inputs": {
+          "method": "POST",
+          "uri": "@{parameters('urlApi')}/api/variables/PrecioCuLb",
+          "headers": { "Content-Type": "application/json", "X-Api-Key": "@parameters('claveApi')" },
+          "body": { "valor": "@body('Consultar_indicadores')?['libra_cobre']?['valor']", "fuente": "RPA_COCHILCO" }
+        },
+        "runAfter": { "Consultar_indicadores": [ "Succeeded" ] }
+      }
+    },
+    "outputs": {}
+  },
+  "parameters": {}
+}

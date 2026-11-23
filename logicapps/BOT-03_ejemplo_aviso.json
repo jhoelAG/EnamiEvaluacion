@@ -1,0 +1,19 @@
+{
+  "tipo": "APROBACION_PENDIENTE",
+  "idEvaluacion": 12,
+  "nroEvaluacion": "COP-2026-0012",
+  "nivel": 2,
+  "nivelNombre": "Jefe de Oficina",
+  "aprobador": { "nombre": "Jefe Oficina Copiapó", "correo": "jefe@ejemplo.cl" },
+  "ingeniero": { "nombre": "Ingeniero de Fomento", "correo": "ingeniero@ejemplo.cl" },
+  "productor": "Juan Pérez Soto",
+  "faena": "San José",
+  "oficina": "Oficina Minera Copiapó",
+  "instrumento": "Reconocimiento de Recursos y/o Reservas",
+  "montoSolicitado": 65000,
+  "van": 7683901.91,
+  "estado": "EN_REVISION",
+  "comentario": "Comentario del nivel anterior",
+  "urlEvaluacion": "https://enami-web-tuapellido.azurewebsites.net/evaluaciones/12",
+  "urlDecision": "https://enami-api-tuapellido.azurewebsites.net/api/evaluaciones/12/decision"
+}

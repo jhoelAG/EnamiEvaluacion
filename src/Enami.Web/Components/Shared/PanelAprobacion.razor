@@ -1,0 +1,140 @@
+@* Revisión y aprobación en tres niveles (BOT-03): envío a revisión, historial de decisiones y decisión del aprobador asignado. *@
+@inject ServicioAprobaciones Aprobaciones
+@inject INotificadorFlujos Notificador
+@inject ServicioCatalogos Catalogos
+
+@if (_historial.Count > 0 || _puedeEnviar || _mensaje is not null)
+{
+    <div class="card mb-3">
+        <div class="card-body">
+            <h2 class="h6">Revisión y aprobación</h2>
+
+            @if (_mensaje is not null)
+            {
+                <div class="alert @_clase py-2 small" role="status">
+                    @_mensaje
+                    @foreach (var a in _avisos) { <div class="text-muted">@a</div> }
+                </div>
+            }
+
+            @if (_historial.Count > 0)
+            {
+                <table class="table table-sm tabla-compacta align-middle mb-3">
+                    <thead><tr><th>Nivel</th><th>Responsable</th><th>Asignada</th><th>Decisión</th><th>Comentario</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in _historial)
+                        {
+                            <tr>
+                                <td>@a.NivelNombre</td>
+                                <td>@a.Aprobador</td>
+                                <td class="num">@a.FechaAsignacion.ToString("dd-MM-yyyy HH:mm")</td>
+                                <td>
+                                    @if (a.FechaDecision is DateTime fd)
+                                    {
+                                        <EstadoSolicitud Estado="@(a.Decision ?? "")" /> <span class="small text-muted">@fd.ToString("dd-MM-yyyy HH:mm")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge text-bg-light border">Pendiente</span>
+                                    }
+                                </td>
+                                <td class="small">@a.Comentario</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+
+            @if (_esAprobador)
+            {
+                <div class="border rounded p-3 bg-body-tertiary">
+                    <div class="fw-semibold mb-2">Su decisión como @(_pendiente!.NivelNombre)</div>
+                    <label class="form-label small" for="ap-comentario">Comentario (obligatorio si observa o rechaza)</label>
+                    <textarea id="ap-comentario" class="form-control form-control-sm mb-2" rows="2" maxlength="@ServicioAprobaciones.LargoComentario" @bind="_comentario"></textarea>
+                    <label class="form-label small" for="ap-causal">Causal de rechazo (solo si rechaza)</label>
+                    <select id="ap-causal" class="form-select form-select-sm mb-3" @bind="_idCausal">
+                        <option value="">Sin causal</option>
+                        @foreach (var c in _causales)
+                        {
+                            <option value="@c.Id">@c.Codigo · @c.Descripcion</option>
+                        }
+                    </select>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-success btn-sm" disabled="@_ocupado" @onclick="() => Decidir(ServicioAprobaciones.Aprobar)">Aprobar</button>
+                        <button class="btn btn-warning btn-sm" disabled="@_ocupado" @onclick="() => Decidir(ServicioAprobaciones.Observar)">Observar</button>
+                        <button class="btn btn-danger btn-sm" disabled="@_ocupado" @onclick="() => Decidir(ServicioAprobaciones.Rechazar)">Rechazar</button>
+                    </div>
+                    <div class="form-text">También puede responder desde el correo de aprobación; la decisión queda registrada igual.</div>
+                </div>
+            }
+            else if (_pendiente is not null)
+            {
+                <p class="small text-muted mb-0">Espera la decisión de @_pendiente.Aprobador (@_pendiente.NivelNombre).</p>
+            }
+
+            @if (_puedeEnviar)
+            {
+                <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                    <button class="btn btn-primary btn-sm" disabled="@_ocupado" @onclick="Enviar">Enviar a revisión</button>
+                    <span class="small text-muted">Se envía con el último cálculo guardado; la revisa el Jefe de Oficina de la faena y luego el Subgerente.</span>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public SolicitudDetalle Detalle { get; set; } = default!;
+    [Parameter, EditorRequired] public UsuarioSesion Usuario { get; set; } = default!;
+    /// <summary>Se invoca después de enviar o decidir, para que la página recargue la evaluación.</summary>
+    [Parameter] public EventCallback Cambio { get; set; }
+
+    private IReadOnlyList<AprobacionVista> _historial = [];
+    private IReadOnlyList<CausalRechazo> _causales = [];
+    private AprobacionVista? _pendiente;
+    private bool _puedeEnviar, _esAprobador, _ocupado;
+    private string? _comentario, _mensaje;
+    private short? _idCausal;
+    private string _clase = "alert-success";
+    private List<string> _avisos = [];
+
+    protected override void OnParametersSet()
+    {
+        var s = Detalle.Solicitud;
+        _historial = Aprobaciones.Historial(s.Id);
+        _pendiente = _historial.LastOrDefault(a => a.FechaDecision is null);
+        _puedeEnviar = Aprobaciones.PuedeEnviar(s, Usuario) && Detalle.UltimoResultado is not null;
+        _esAprobador = s.Estado == EstadosSolicitud.EnRevision && _pendiente is not null
+                       && _pendiente.Correo.Equals(Usuario.Correo, StringComparison.OrdinalIgnoreCase);
+        if (_esAprobador && _causales.Count == 0) _causales = Catalogos.Causales();
+    }
+
+    private Task Enviar() => Ejecutar(() => Aprobaciones.Enviar(Detalle.Solicitud.Id, Usuario));
+
+    private Task Decidir(string decision) => Ejecutar(() =>
+        Aprobaciones.Decidir(Detalle.Solicitud.Id, Usuario, decision, _comentario, decision == ServicioAprobaciones.Rechazar ? _idCausal : null));
+
+    private async Task Ejecutar(Func<ResultadoAprobacion> accion)
+    {
+        if (_ocupado) return;
+        _ocupado = true;
+        _avisos = [];
+        try
+        {
+            var r = accion();
+            foreach (var e in r.Eventos)
+                if (await Notificador.EnviarAsync(e) is string aviso) _avisos.Add(aviso);
+            _mensaje = r.Mensaje + (r.Eventos.Count > 0 && _avisos.Count == 0 ? " Se avisó por correo mediante el flujo de aprobación." : "");
+            _clase = "alert-success";
+            _comentario = null;
+            _idCausal = null;
+            await Cambio.InvokeAsync();
+        }
+        catch (ErrorNegocio ex)
+        {
+            _mensaje = ex.Message;
+            _clase = "alert-danger";
+        }
+        finally { _ocupado = false; }
+    }
+}

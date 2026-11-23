@@ -1,0 +1,83 @@
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="" aria-label="ENAMI, Evaluación de Fomento, ir al inicio">
+            <span class="marca-menu">ENAMI</span>
+            <span class="marca-menu-sub">Evaluación de Fomento</span>
+        </a>
+    </div>
+</div>
+
+<input type="checkbox" title="Menú de navegación" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column pb-3" aria-label="Menú principal">
+        <div class="grupo-menu">Evaluación</div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi icono-inicio" aria-hidden="true"></span> Inicio
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="evaluaciones" Match="NavLinkMatch.All">
+                <span class="bi icono-solicitudes" aria-hidden="true"></span> Evaluaciones de proyecto
+            </NavLink>
+        </div>
+        <AuthorizeView Roles="@($"{Roles.Ingeniero},{Roles.Administrador}")">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="evaluaciones/nueva">
+                    <span class="bi icono-nueva" aria-hidden="true"></span> Nueva evaluación
+                </NavLink>
+            </div>
+        </AuthorizeView>
+
+        <div class="grupo-menu">Consulta</div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="evaluar">
+                <span class="bi icono-simulador" aria-hidden="true"></span> Simulador
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="mercado">
+                <span class="bi icono-mercado" aria-hidden="true"></span> Dólar y minerales
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="variables">
+                <span class="bi icono-variables" aria-hidden="true"></span> Variables
+            </NavLink>
+        </div>
+
+        <AuthorizeView Roles="@($"{Roles.Jefatura},{Roles.Administrador}")">
+            <div class="grupo-menu">Administración</div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="instrumentos">
+                    <span class="bi icono-instrumentos" aria-hidden="true"></span> Instrumentos de fomento
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="formulas">
+                    <span class="bi icono-formulas" aria-hidden="true"></span> Editor de fórmulas
+                </NavLink>
+            </div>
+        </AuthorizeView>
+        <AuthorizeView Roles="@Roles.Administrador">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="usuarios">
+                    <span class="bi icono-usuarios" aria-hidden="true"></span> Usuarios
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="planillas">
+                    <span class="bi icono-planillas" aria-hidden="true"></span> Cargar planillas
+                </NavLink>
+            </div>
+        </AuthorizeView>
+        <AuthorizeView Roles="@($"{Roles.Jefatura},{Roles.Administrador}")">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="auditoria">
+                    <span class="bi icono-auditoria" aria-hidden="true"></span> Auditoría
+                </NavLink>
+            </div>
+        </AuthorizeView>
+    </nav>
+</div>

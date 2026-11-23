@@ -1,0 +1,26 @@
+@* Etiqueta de color para el estado de una evaluación de proyecto. *@
+<span class="badge estado @Clase">@Texto</span>
+
+@code {
+    [Parameter, EditorRequired] public string Estado { get; set; } = "";
+
+    private string Clase => Estado switch
+    {
+        EstadosSolicitud.Borrador => "text-bg-light border",
+        EstadosSolicitud.EnRevision => "text-bg-primary",
+        EstadosSolicitud.Observada => "text-bg-warning",
+        EstadosSolicitud.Aprobada => "text-bg-success",
+        EstadosSolicitud.Rechazada => "text-bg-danger",
+        _ => "text-bg-secondary"
+    };
+
+    private string Texto => Estado switch
+    {
+        EstadosSolicitud.Borrador => "Borrador",
+        EstadosSolicitud.EnRevision => "En revisión",
+        EstadosSolicitud.Observada => "Observada",
+        EstadosSolicitud.Aprobada => "Aprobada",
+        EstadosSolicitud.Rechazada => "Rechazada",
+        _ => Estado
+    };
+}

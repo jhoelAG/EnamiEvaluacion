@@ -1,0 +1,441 @@
+@page "/formulas"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = $"{Roles.Jefatura},{Roles.Administrador}")]
+@inject IRepositorioPlantillas Repo
+@inject ServicioAuditoria Auditoria
+@inject ServicioCatalogos Catalogos
+
+<PageTitle>Editor de fórmulas · Evaluación Fomento</PageTitle>
+
+<h1 class="h3 mb-1">Editor de fórmulas</h1>
+<p class="text-muted small mb-3">
+    Cada instrumento de fomento tiene sus propias fórmulas: los <strong>campos del formulario</strong> (secciones, datos y de dónde se precargan) y las <strong>fórmulas</strong>.
+    Cada cambio queda en una versión nueva que la Jefatura de Fomento debe aprobar antes de usarse. Los instrumentos se agregan en <a href="instrumentos">Instrumentos de fomento</a>.
+</p>
+
+<div class="row g-2 align-items-end mb-3">
+    <div class="col-md-5">
+        <label class="form-label" for="instrumento">Instrumento de fomento</label>
+        <select id="instrumento" class="form-select" value="@_idInstrumento" @onchange="CambiarInstrumento">
+            @foreach (var i in _instrumentos)
+            {
+                <option value="@i.Id">@i.Nombre@(i.Activo ? "" : " (desactivado)")</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label class="form-label" for="version">Versión</label>
+        <select id="version" class="form-select" value="@_id" @onchange="CambiarVersion" disabled="@(_versiones.Count == 0)">
+            @foreach (var p in _versiones)
+            {
+                <option value="@p.Id">v@(p.Version) (@p.Estado)</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-4 text-md-end">
+        @if (_p is not null && _p.Estado != EstadoPlantilla.Borrador)
+        {
+            <button class="btn btn-outline-primary" @onclick="CrearBorrador">Crear nueva versión para editar</button>
+        }
+        @if (_p is not null && _p.Estado != EstadoPlantilla.Vigente)
+        {
+            <button class="btn btn-outline-danger ms-md-2 mt-2 mt-md-0" @onclick="PedirEliminar">Eliminar esta versión</button>
+        }
+    </div>
+</div>
+
+@if (_mensaje is not null)
+{
+    <div class="alert @_claseMensaje">@_mensaje</div>
+}
+
+@if (_versiones.Count == 0 && _instrumentos.Count > 0)
+{
+    <div class="alert alert-info">Este instrumento aún no tiene fórmulas. Cree la primera versión en <a href="instrumentos">Instrumentos de fomento</a>, copiando las de otro instrumento.</div>
+}
+
+@if (_confirmarEliminar && _p is not null)
+{
+    <div class="alert alert-warning d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span>¿Eliminar <strong>@_p.Instrumento — v@(_p.Version)</strong> (@_p.Estado)? Se borran sus campos y fórmulas, y no se puede deshacer.</span>
+        <span class="d-flex gap-2">
+            <button class="btn btn-danger btn-sm" @onclick="Eliminar">Sí, eliminar</button>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="() => _confirmarEliminar = false">Cancelar</button>
+        </span>
+    </div>
+}
+
+@if (_p is not null)
+{
+    bool editable = _p.Estado == EstadoPlantilla.Borrador;
+    <div class="mb-2">
+        <span class="badge @Formato.ClaseEstado(_p.Estado)">@_p.Estado</span>
+        <span class="small text-muted ms-2">Autor: @_p.Autor@(_p.AprobadaPor is null ? "" : $" · aprobada por {_p.AprobadaPor} el {_p.FechaAprobacion:dd-MM-yyyy HH:mm}")</span>
+        @if (!editable)
+        {
+            <span class="small text-muted ms-2">Solo lectura: para cambiarla cree una nueva versión.</span>
+        }
+    </div>
+
+    <div class="small mb-3">
+        <strong>Modo de cálculo:</strong>&nbsp;@if (_p.Modo == ModoCalculo.Escenarios)
+        {
+            <text>por escenarios de precio (Anexo 2). Las fórmulas se calculan para 8 precios alrededor de <code>PrecioProyectado</code> (paso <code>PasoPrecio</code>)
+            y el precio proyectado; el identificador <code>Precio</code> es el precio de cada fila. Se informan <code>Recuperacion</code> y <code>VanProyecto</code> al precio proyectado,
+            el precio crítico (donde <code>Utilidad</code> = 0) y el precio mínimo de retorno (donde <code>SaldoFinanciamiento</code> = 0).</text>
+        }
+        else
+        {
+            <text>flujo de caja por período: <code>VAN = −Inversion + Σ FlujoPeriodo / (1 + TasaPeriodo)^t</code>.</text>
+        }
+    </div>
+
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item"><button class="nav-link @(_pestana == 0 ? "active" : "")" @onclick="() => _pestana = 0">Fórmulas (@_p.Formulas.Count)</button></li>
+        <li class="nav-item"><button class="nav-link @(_pestana == 1 ? "active" : "")" @onclick="() => _pestana = 1">Campos del formulario y variables (@_p.Variables.Count)</button></li>
+    </ul>
+
+    @if (_pestana == 1)
+    {
+        <EditorCampos Plantilla="_p" Editable="editable" Cambio="Revalidar" />
+        @foreach (var e in _compilado?.Errores.Where(x => x.Elemento.StartsWith("Variable") || string.IsNullOrEmpty(x.Elemento)) ?? [])
+        {
+            <div class="text-danger small">@e</div>
+        }
+        @if (editable)
+        {
+            <div class="mt-3 d-flex flex-wrap gap-2">
+                <button class="btn btn-primary" @onclick="Guardar">Guardar borrador</button>
+            </div>
+        }
+    }
+    else
+    {
+    <div class="row g-4">
+        <div class="col-xl-8">
+            <table class="table table-sm align-middle">
+                <thead><tr><th style="width:24%">Código y nombre</th><th>Expresión</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var f in _p.Formulas)
+                    {
+                        var errores = ErroresDe(f.Codigo);
+                        <tr class="@(f == _seleccionada ? "table-active" : "")" @onclick="() => _seleccionada = f">
+                            <td>
+                                <input class="form-control form-control-sm font-monospace mb-1" title="Código (se usa dentro de otras fórmulas)" disabled="@(!editable || EsObligatoria(f.Codigo))" value="@f.Codigo" @onchange="e => { f.Codigo = e.Value?.ToString() ?? string.Empty; Revalidar(); }" />
+                                <input class="form-control form-control-sm" title="Nombre visible" disabled="@(!editable)" @bind="f.Nombre" />
+                            </td>
+                            <td>
+                                <textarea rows="2" class="form-control form-control-sm font-monospace @(errores.Count > 0 ? "is-invalid" : "is-valid")" disabled="@(!editable)"
+                                          value="@f.Expresion" @oninput="e => { f.Expresion = e.Value?.ToString() ?? string.Empty; Revalidar(); }"></textarea>
+                                @foreach (var err in errores)
+                                {
+                                    <div class="invalid-feedback d-block">@err.Mensaje</div>
+                                }
+                            </td>
+                            <td>
+                                @if (editable && !EsObligatoria(f.Codigo))
+                                {
+                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar fórmula" @onclick="() => Eliminar(f)">✕</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @foreach (var e in _compilado?.Errores.Where(x => string.IsNullOrEmpty(x.Elemento) || x.Elemento.StartsWith("Variable")) ?? [])
+            {
+                <div class="text-danger small">@e</div>
+            }
+
+            @if (editable)
+            {
+                <button class="btn btn-sm btn-outline-secondary" @onclick="Agregar">+ Agregar fórmula</button>
+                <div class="mt-3 d-flex flex-wrap gap-2">
+                    <button class="btn btn-secondary" @onclick="Probar">Probar con valores por defecto</button>
+                    <button class="btn btn-primary" @onclick="Guardar">Guardar borrador</button>
+                    @if (_usuario?.Rol == Roles.Jefatura)
+                    {
+                        <button class="btn btn-success" disabled="@(!(_compilado?.EsValido ?? false))" @onclick="Activar">Aprobar y activar</button>
+                    }
+                    else
+                    {
+                        <span class="small text-muted align-self-center">La Jefatura de Fomento aprueba y activa la versión.</span>
+                    }
+                </div>
+            }
+
+            @if (_prueba is not null)
+            {
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h2 class="h6">Resultado de la prueba</h2>
+                        @if (!_prueba.Exitoso)
+                        {
+                            <ul class="text-danger mb-0">@foreach (var e in _prueba.Errores) { <li>@e</li> }</ul>
+                        }
+                        else
+                        {
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th></th><th class="text-end">Esta versión</th><th class="text-end">Versión vigente</th><th class="text-end">Diferencia</th></tr></thead>
+                                <tbody>
+                                    @if (_prueba.Modo == ModoCalculo.Escenarios)
+                                    {
+                                        <tr>
+                                            <td>Recuperación</td>
+                                            <td class="text-end">@Formato.Dolares(_prueba.Recuperacion)</td>
+                                            <td class="text-end">@(_pruebaVigente?.Exitoso == true ? Formato.Dolares(_pruebaVigente.Recuperacion) : "—")</td>
+                                            <td class="text-end">@(_pruebaVigente?.Exitoso == true ? Formato.Dolares(_prueba.Recuperacion - _pruebaVigente.Recuperacion) : "—")</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Precio crítico</td>
+                                            <td class="text-end">@(_prueba.PrecioCritico is double pc ? Formato.Numero(pc, 1) + " " + _prueba.UnidadPrecio : "—")</td>
+                                            <td class="text-end">@(_pruebaVigente?.PrecioCritico is double pv ? Formato.Numero(pv, 1) : "—")</td>
+                                            <td></td>
+                                        </tr>
+                                    }
+                                    <tr>
+                                        <td>VAN</td>
+                                        <td class="text-end">@Formato.Dolares(_prueba.Van)</td>
+                                        <td class="text-end">@(_pruebaVigente?.Exitoso == true ? Formato.Dolares(_pruebaVigente.Van) : "—")</td>
+                                        <td class="text-end">@(_pruebaVigente?.Exitoso == true ? Formato.Dolares(_prueba.Van - _pruebaVigente.Van) : "—")</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Dictamen</td>
+                                        <td class="text-end">@(_prueba.Viable ? "VIABLE" : "NO VIABLE")</td>
+                                        <td class="text-end">@(_pruebaVigente?.Exitoso == true ? (_pruebaVigente.Viable ? "VIABLE" : "NO VIABLE") : "—")</td>
+                                        <td></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="col-xl-4">
+            <h2 class="h6">Variables disponibles</h2>
+            <p class="small text-muted">@(editable ? "Haga clic en una variable para agregarla a la fórmula seleccionada." : "Variables que pueden usar las fórmulas.")</p>
+            <div class="d-flex flex-wrap gap-1 mb-3">
+                @foreach (var v in _p.Variables.Where(v => v.EsNumerica))
+                {
+                    <button class="btn btn-sm btn-outline-dark font-monospace" title="@v.Nombre (@v.Unidad)" disabled="@(!editable)" @onclick="() => Insertar(v.Codigo)">@v.Codigo</button>
+                }
+                @if (_p.Modo == ModoCalculo.Escenarios)
+                {
+                    <button class="btn btn-sm btn-outline-dark font-monospace" title="Precio de la fila de escenarios" disabled="@(!editable)" @onclick="() => Insertar(MotorFormulas.CodigoPrecio)">@MotorFormulas.CodigoPrecio</button>
+                }
+                else
+                {
+                    <button class="btn btn-sm btn-outline-dark font-monospace" title="Número del período (1, 2, 3...)" disabled="@(!editable)" @onclick="() => Insertar(MotorFormulas.CodigoPeriodo)">@MotorFormulas.CodigoPeriodo</button>
+                }
+            </div>
+            <h2 class="h6">Fórmulas como variables</h2>
+            <div class="d-flex flex-wrap gap-1 mb-3">
+                @foreach (var f in _p.Formulas)
+                {
+                    <button class="btn btn-sm btn-outline-secondary font-monospace" disabled="@(!editable)" @onclick="() => Insertar(f.Codigo)">@f.Codigo</button>
+                }
+            </div>
+            <h2 class="h6">Operadores y funciones</h2>
+            <ul class="small ps-3">
+                <li><code>+ - * / ^</code> y paréntesis</li>
+                <li>Comparaciones: <code>&lt; &lt;= &gt; &gt;= = &lt;&gt;</code> (entregan 1 o 0)</li>
+                <li>Decimales con coma o punto: <code>2,5</code> o <code>2.5</code></li>
+                <li>Argumentos separados con punto y coma</li>
+                @foreach (var f in Enami.Dominio.Calculo.Expresiones.Funciones.Catalogo)
+                {
+                    <li><code>@f.Ayuda</code></li>
+                }
+            </ul>
+            @if (_p.Modo == ModoCalculo.Escenarios)
+            {
+                <p class="small text-muted">Obligatorias: <code>Utilidad</code>, <code>Recuperacion</code>, <code>SaldoFinanciamiento</code>, <code>VanProyecto</code>, y como variable o fórmula <code>PrecioProyectado</code> y <code>Financiamiento</code>.</p>
+            }
+            else
+            {
+                <p class="small text-muted">Obligatorias: <code>FlujoPeriodo</code>, <code>TasaPeriodo</code> y las variables <code>Inversion</code> y <code>PlazoMeses</code>.</p>
+            }
+        </div>
+    </div>
+    }
+}
+
+@code {
+    private PlantillaCalculo? _p;
+    private int _id;
+    private byte _idInstrumento;
+    private IReadOnlyList<InstrumentoFomento> _instrumentos = [];
+    private List<PlantillaCalculo> _versiones = [];
+    /// <summary>Instrumento que se abre al entrar (desde «Instrumentos de fomento»).</summary>
+    [SupplyParameterFromQuery(Name = "instrumento")] public int? InstrumentoInicial { get; set; }
+    private FormulaCalculo? _seleccionada;
+    private MotorFormulas.Compilado? _compilado;
+    private ResultadoEvaluacion? _prueba, _pruebaVigente;
+    private string? _mensaje;
+    private string _claseMensaje = "alert-info";
+    private UsuarioSesion? _usuario;
+    private int _pestana;
+    private bool _confirmarEliminar;
+
+    private void PedirEliminar()
+    {
+        if (_p is null) return;
+        if (Repo.MotivoNoEliminable(_p.Id) is string motivo) { Mensaje("No se puede eliminar: " + motivo, "alert-warning"); _confirmarEliminar = false; return; }
+        _mensaje = null;
+        _confirmarEliminar = true;
+    }
+
+    private void Eliminar()
+    {
+        if (_p is null) return;
+        _confirmarEliminar = false;
+        try
+        {
+            string nombre = $"{_p.Instrumento} v{_p.Version} ({_p.Estado})";
+            Repo.Eliminar(_p.Id);
+            Auditoria.Registrar("PLANTILLA_ELIMINADA", _usuario?.Id, detalle: "Se eliminó la versión de fórmulas " + nombre);
+            MostrarInstrumento(_p.IdInstrumento);
+            Mensaje($"Se eliminó la versión {nombre}.", "alert-success");
+        }
+        catch (InvalidOperationException ex) { Mensaje(ex.Message, "alert-danger"); }
+    }
+    [CascadingParameter] private Task<AuthenticationState> Estado { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _usuario = await Estado.UsuarioAsync();
+        _instrumentos = Catalogos.Instrumentos();
+        if (InstrumentoInicial is int i && _instrumentos.Any(x => x.Id == i)) { MostrarInstrumento((byte)i); return; }
+        var inicial = Repo.Listar().FirstOrDefault(p => p.Estado == EstadoPlantilla.Borrador) ?? Repo.Listar().FirstOrDefault();
+        if (inicial is not null) Cargar(inicial.Id);
+        else if (_instrumentos.Count > 0) MostrarInstrumento(_instrumentos[0].Id);
+    }
+
+    private void CambiarInstrumento(ChangeEventArgs e)
+    {
+        if (byte.TryParse(e.Value?.ToString(), out var id)) { _mensaje = null; MostrarInstrumento(id); }
+    }
+
+    /// <summary>Abre el borrador del instrumento si lo tiene; si no, la versión vigente o la más reciente.</summary>
+    private void MostrarInstrumento(byte id)
+    {
+        _idInstrumento = id;
+        _versiones = Repo.Listar().Where(p => p.IdInstrumento == id).ToList();
+        var abrir = _versiones.FirstOrDefault(p => p.Estado == EstadoPlantilla.Borrador)
+                    ?? _versiones.FirstOrDefault(p => p.Estado == EstadoPlantilla.Vigente) ?? _versiones.FirstOrDefault();
+        if (abrir is not null) Cargar(abrir.Id);
+        else { _p = null; _id = 0; _seleccionada = null; _prueba = _pruebaVigente = null; _compilado = null; _confirmarEliminar = false; }
+    }
+
+    private void CambiarVersion(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var id)) Cargar(id);
+    }
+
+    private void Cargar(int id)
+    {
+        _id = id;
+        _confirmarEliminar = false;
+        var original = Repo.Obtener(id);
+        // se trabaja sobre una copia: los cambios se guardan solo al presionar «Guardar borrador»
+        _p = original is null ? null : Copiar(original);
+        if (_p is not null)
+        {
+            _idInstrumento = _p.IdInstrumento;
+            _versiones = Repo.Listar().Where(p => p.IdInstrumento == _idInstrumento).ToList();
+        }
+        _seleccionada = _p?.Formulas.FirstOrDefault();
+        _prueba = _pruebaVigente = null;
+        Revalidar();
+    }
+
+    private static PlantillaCalculo Copiar(PlantillaCalculo o)
+    {
+        var c = o.NuevaVersion(o.Id, o.Autor);
+        c.Version = o.Version; c.Estado = o.Estado; c.FechaCreacion = o.FechaCreacion; c.IdAutor = o.IdAutor; c.IdAprobador = o.IdAprobador;
+        c.AprobadaPor = o.AprobadaPor; c.FechaAprobacion = o.FechaAprobacion; c.Comentario = o.Comentario;
+        return c;
+    }
+
+    private bool EsObligatoria(string codigo) => (_p?.Modo == ModoCalculo.Escenarios
+        ? new[] { MotorFormulas.CodigoUtilidad, MotorFormulas.CodigoRecuperacion, MotorFormulas.CodigoSaldo, MotorFormulas.CodigoVanProyecto }
+        : new[] { MotorFormulas.CodigoFlujo, MotorFormulas.CodigoTasa }).Any(c => c.Equals(codigo, StringComparison.OrdinalIgnoreCase));
+
+    private void Revalidar() => _compilado = _p is null ? null : MotorFormulas.Compilar(_p);
+
+    private List<ErrorValidacion> ErroresDe(string codigo) =>
+        _compilado?.Errores.Where(e => e.Elemento.Equals(codigo, StringComparison.OrdinalIgnoreCase)).ToList() ?? [];
+
+    private void Insertar(string codigo)
+    {
+        if (_seleccionada is null) return;
+        var actual = _seleccionada.Expresion.TrimEnd();
+        _seleccionada.Expresion = actual.Length == 0 ? codigo : actual + " " + codigo;
+        Revalidar();
+    }
+
+    private void Agregar()
+    {
+        if (_p is null) return;
+        int n = 1;
+        while (_p.Formulas.Any(f => f.Codigo == $"NuevaFormula{n}")) n++;
+        var f = new FormulaCalculo { Codigo = $"NuevaFormula{n}", Nombre = "Nueva fórmula", Expresion = "0" };
+        // se agrega antes de la fórmula final para mantener el orden de lectura
+        int i = _p.Formulas.FindIndex(x => x.Codigo == (_p.Modo == ModoCalculo.Escenarios ? MotorFormulas.CodigoRecuperacion : MotorFormulas.CodigoFlujo));
+        _p.Formulas.Insert(i < 0 ? _p.Formulas.Count : i, f);
+        _seleccionada = f;
+        Revalidar();
+    }
+
+    private void Eliminar(FormulaCalculo f)
+    {
+        _p?.Formulas.Remove(f);
+        if (_seleccionada == f) _seleccionada = _p?.Formulas.FirstOrDefault();
+        Revalidar();
+    }
+
+    private void CrearBorrador()
+    {
+        if (_p is null) return;
+        var b = Repo.CrearBorrador(_p.Id, _usuario!.Id);
+        Mensaje($"Se creó la versión {b.Version} en borrador. Ya puede editar las fórmulas.", "alert-info");
+        Cargar(b.Id);
+    }
+
+    private void Probar()
+    {
+        if (_p is null) return;
+        _prueba = MotorEvaluacion.Evaluar(_p);
+        var vigente = Repo.ObtenerVigente(_p.IdInstrumento);
+        _pruebaVigente = vigente is null ? null : MotorEvaluacion.Evaluar(vigente);
+    }
+
+    private void Guardar()
+    {
+        if (_p is null) return;
+        try
+        {
+            Repo.GuardarBorrador(Copiar(_p));
+            Mensaje(_compilado?.EsValido == true ? "Borrador guardado." : "Borrador guardado, pero tiene errores: corríjalos antes de activarlo.",
+                    _compilado?.EsValido == true ? "alert-success" : "alert-warning");
+        }
+        catch (InvalidOperationException ex) { Mensaje(ex.Message, "alert-danger"); }
+    }
+
+    private void Activar()
+    {
+        if (_p is null) return;
+        if (_usuario?.Rol != Roles.Jefatura) { Mensaje("Solo la Jefatura de Fomento puede aprobar una versión.", "alert-warning"); return; }
+        try
+        {
+            Repo.GuardarBorrador(Copiar(_p));
+            Repo.Activar(_p.Id, _usuario.Id);
+            Mensaje($"Versión {_p.Version} activada. Las nuevas evaluaciones usarán estas fórmulas.", "alert-success");
+            Cargar(_p.Id);
+        }
+        catch (InvalidOperationException ex) { Mensaje(ex.Message, "alert-danger"); }
+    }
+
+    private void Mensaje(string texto, string clase) { _mensaje = texto; _claseMensaje = clase; }
+}

@@ -1,0 +1,30 @@
+@page "/auditoria"
+@attribute [Authorize(Roles = $"{Roles.Jefatura},{Roles.Administrador}")]
+@inject ServicioAuditoria Auditoria
+@inject ServicioUsuarios Usuarios
+
+<PageTitle>Auditoría · Evaluación Fomento</PageTitle>
+
+<h1 class="h3 mb-1">Registro de auditoría</h1>
+<p class="text-muted small">Últimas 200 acciones de usuarios y robots (tabla AUDITORIA). El registro no se puede modificar desde la aplicación.</p>
+
+<table class="table table-sm tabla-compacta align-middle">
+    <thead><tr><th>Fecha</th><th>Autor</th><th>Acción</th><th>Evaluación</th><th>Detalle</th></tr></thead>
+    <tbody>
+        @foreach (var a in Auditoria.Ultimos(200))
+        {
+            <tr>
+                <td class="text-nowrap">@a.Fecha.ToString("dd-MM-yyyy HH:mm:ss")</td>
+                <td>@(a.Robot ?? (a.IdUsuario is int id ? _nombres.GetValueOrDefault(id, $"Usuario {id}") : "—"))</td>
+                <td><code>@a.Accion</code></td>
+                <td>@if (a.IdSolicitud is long s) { <a href="evaluaciones/@s">#@s</a> }</td>
+                <td class="small">@a.Detalle</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private Dictionary<int, string> _nombres = [];
+    protected override void OnInitialized() => _nombres = Usuarios.Listar().ToDictionary(u => u.Id, u => u.NombreCompleto);
+}

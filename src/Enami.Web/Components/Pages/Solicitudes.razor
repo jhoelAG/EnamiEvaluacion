@@ -1,0 +1,119 @@
+@page "/evaluaciones"
+@page "/solicitudes"
+@rendermode InteractiveServer
+@inject ServicioSolicitudes Servicio
+@inject ServicioAprobaciones Aprobaciones
+
+<PageTitle>Evaluaciones de proyecto · Evaluación Fomento</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Evaluaciones de proyecto</h1>
+    <AuthorizeView Roles="@($"{Roles.Ingeniero},{Roles.Administrador}")">
+        <a class="btn btn-acento btn-sm" href="evaluaciones/nueva">Nueva evaluación de proyecto</a>
+    </AuthorizeView>
+</div>
+
+<p class="text-muted small">@Alcance</p>
+
+@if (_pendientes.Count > 0)
+{
+    <div class="alert alert-primary py-2">
+        @(_pendientes.Count == 1 ? "Una evaluación de proyecto espera su decisión." : $"{_pendientes.Count} evaluaciones de proyecto esperan su decisión.")
+        <button class="btn btn-link btn-sm p-0 ms-1 align-baseline" @onclick="VerPendientes">Ver solo esas</button>
+    </div>
+}
+
+<div class="row g-2 mb-3">
+    <div class="col-md-5">
+        <input class="form-control form-control-sm" placeholder="Buscar por número, productor, RUT o código de faena" @bind="_texto" @bind:event="oninput" @bind:after="Cargar" />
+    </div>
+    <div class="col-md-3">
+        <select class="form-select form-select-sm" @bind="_estado" @bind:after="CambiarEstado">
+            <option value="">Todos los estados</option>
+            <option value="@EstadosSolicitud.Borrador">Borrador</option>
+            <option value="@EstadosSolicitud.EnRevision">En revisión</option>
+            <option value="@EstadosSolicitud.Observada">Observada</option>
+            <option value="@EstadosSolicitud.Aprobada">Aprobada</option>
+            <option value="@EstadosSolicitud.Rechazada">Rechazada</option>
+        </select>
+    </div>
+</div>
+
+@if (_lista.Count == 0)
+{
+    <p class="text-muted">No hay evaluaciones de proyecto que coincidan.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm tabla-compacta align-middle">
+            <thead>
+                <tr><th>N.º</th><th>Ingreso</th><th>Productor</th><th>Faena</th><th>Oficina</th><th>Instrumento</th>
+                    <th class="text-end">Monto</th><th class="text-end">VAN</th><th>Estado</th><th>Ingeniero</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var s in _lista)
+                {
+                    <tr>
+                        <td class="num"><a href="evaluaciones/@s.Id">@s.NroSolicitud</a></td>
+                        <td class="num">@s.FechaIngreso.ToString("dd-MM-yyyy")</td>
+                        <td>@s.Productor<div class="small text-muted">@s.RutProductor</div></td>
+                        <td>@s.Faena<div class="small text-muted">@s.CodigoFaena</div></td>
+                        <td>@(s.Oficina ?? "—")</td>
+                        <td>@s.Instrumento</td>
+                        <td class="text-end">@Formato.Dolares((double)s.Monto)</td>
+                        <td class="text-end @(s.UltimoVan < 0 ? "text-danger" : "")">@(s.UltimoVan is decimal v ? Formato.Dolares((double)v) : "—")</td>
+                        <td>
+                            <EstadoSolicitud Estado="@s.Estado" />
+                            @if (_pendientes.Contains(s.Id)) { <div class="small fw-semibold text-primary">Espera su decisión</div> }
+                        </td>
+                        <td>@s.Ingeniero</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> Estado { get; set; } = default!;
+    private UsuarioSesion? _usuario;
+    private IReadOnlyList<SolicitudVista> _lista = [];
+    private string _texto = "", _estado = "";
+    private HashSet<long> _pendientes = [];
+
+    private string Alcance => _usuario?.Rol switch
+    {
+        Roles.Ingeniero => "Se muestran las evaluaciones de proyecto que usted registró.",
+        Roles.JefeOficina => $"Se muestran las evaluaciones de proyecto de las faenas de {_usuario.Oficina}.",
+        _ => "Se muestran las evaluaciones de proyecto de todas las oficinas."
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _usuario = await Estado.UsuarioAsync();
+        Cargar();
+    }
+
+    private void Cargar()
+    {
+        _pendientes = Aprobaciones.PendientesDe(_usuario!.Id).ToHashSet();
+        _lista = Servicio.Listar(_usuario!, string.IsNullOrEmpty(_estado) ? null : _estado, _texto);
+        if (_soloPendientes) _lista = _lista.Where(s => _pendientes.Contains(s.Id)).ToList();
+    }
+
+    private bool _soloPendientes;
+
+    private void CambiarEstado()
+    {
+        _soloPendientes = false;
+        Cargar();
+    }
+
+    private void VerPendientes()
+    {
+        _soloPendientes = true;
+        _estado = EstadosSolicitud.EnRevision;
+        Cargar();
+    }
+}

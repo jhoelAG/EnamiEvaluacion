@@ -1,0 +1,162 @@
+@page "/planillas"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = Roles.Administrador)]
+@inject ServicioCargaPlanillas Carga
+@inject ServicioFichas Fichas
+@inject ServicioDatosPrueba DatosPrueba
+@inject Microsoft.Extensions.Options.IOptions<OpcionesSemilla> OpcSemilla
+
+<PageTitle>Cargar planillas · Evaluación Fomento</PageTitle>
+
+<h1 class="h3 mb-1">Cargar planillas de ENAMI</h1>
+<p class="text-muted">Cargue las fichas en este orden. Si un productor o una faena ya existe, se actualizan sus datos; las filas con problemas no detienen la carga y se informan abajo.</p>
+
+<div class="row g-3 mb-4">
+    @foreach (var p in _planillas)
+    {
+        <div class="col-md-6 col-xl-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h2 class="h6">@p.Paso. @p.Titulo</h2>
+                    <p class="small text-muted mb-2">@p.Archivo · @p.Detalle</p>
+                    <InputFile OnChange="e => Cargar(p, e)" accept=".xlsx" disabled="@_ocupado" class="form-control form-control-sm" />
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@if (_ocupado)
+{
+    <div class="alert alert-info d-flex align-items-center gap-2">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Procesando @_procesando… (la base de padrones y la recepción pueden tardar cerca de un minuto)
+    </div>
+}
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+@if (OpcSemilla.Value.CompletarDatosPrueba)
+{
+    <div class="alert alert-warning d-flex justify-content-between align-items-center gap-3">
+        <div class="small">
+            <strong>Base de prueba.</strong> Completa los campos que las planillas dejan vacíos (oficina, comuna, distancia, padrón, nombres, representante legal y recursos)
+            con datos recreados pero coherentes. Solo llena lo vacío y siempre da el mismo resultado.
+            @if (_resumenPrueba is not null) { <div class="mt-1">Último resultado: @_resumenPrueba</div> }
+        </div>
+        <button class="btn btn-outline-primary btn-sm text-nowrap" @onclick="CompletarPrueba" disabled="@_ocupado">Completar datos de prueba</button>
+    </div>
+}
+
+<p class="small">Hoy hay <strong>@_totales.Productores.ToString("N0", Formato.Chile)</strong> productores y <strong>@_totales.Faenas.ToString("N0", Formato.Chile)</strong> faenas en la base;
+    <strong>@_totales.FaenasElegibles.ToString("N0", Formato.Chile)</strong> faenas están activas, con oficina y con padrón vigente.
+    @if (_recepcion.Lotes > 0)
+    {
+        <text>La recepción tiene <strong>@_recepcion.Lotes.ToString("N0", Formato.Chile)</strong> lotes hasta el @_recepcion.Hasta?.ToString("dd-MM-yyyy").</text>
+    }
+    else
+    {
+        <text>Aún no se carga la recepción de minerales.</text>
+    }
+</p>
+
+@foreach (var r in _resultados)
+{
+    <div class="card mb-3">
+        <div class="card-body">
+            <h2 class="h6">@r.Planilla</h2>
+            <p class="mb-2 small">
+                @r.FilasLeidas.ToString("N0", Formato.Chile) filas leídas · <strong>@r.Nuevos.ToString("N0", Formato.Chile)</strong> nuevos ·
+                <strong>@r.Actualizados.ToString("N0", Formato.Chile)</strong> actualizados · <span class="@(r.Rechazadas.Count > 0 ? "text-danger" : "")">@r.Rechazadas.Count.ToString("N0", Formato.Chile) rechazadas</span> ·
+                @r.Observaciones.Count.ToString("N0", Formato.Chile) observaciones · @r.Duracion.TotalSeconds.ToString("0.0", Formato.Chile) s
+            </p>
+            @if (r.Rechazadas.Count > 0 || r.Observaciones.Count > 0)
+            {
+                <details>
+                    <summary class="small">Ver detalle (primeras 100 filas)</summary>
+                    <table class="table table-sm tabla-compacta mt-2">
+                        <thead><tr><th>Fila</th><th>Tipo</th><th>Campo</th><th>Motivo</th></tr></thead>
+                        <tbody>
+                            @foreach (var x in r.Rechazadas.Select(x => (x.Fila, Tipo: "Rechazada", x.Campo, Texto: x.Motivo))
+                                         .Concat(r.Observaciones.Select(o => (o.Fila, Tipo: "Observación", o.Campo, Texto: o.Detalle))).Take(100))
+                            {
+                                <tr><td>@x.Fila</td><td>@x.Tipo</td><td>@x.Campo</td><td>@x.Texto</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </details>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private record Planilla(int Paso, string Titulo, string Archivo, string Detalle, Func<ServicioCargaPlanillas, string, int, ResumenCarga> Accion);
+
+    private readonly Planilla[] _planillas =
+    [
+        new(1, "Ficha de productores", "1_Ficha_Productor.xlsx", "RUT, tipo, comuna y nivel de cumplimiento.", (c, r, u) => c.CargarProductores(r, u)),
+        new(2, "Ficha de faenas", "2_Ficha_Faena.xlsx", "Requiere los productores cargados.", (c, r, u) => c.CargarFaenas(r, u)),
+        new(3, "Base de padrones", "3_BD_Padrones.xlsx", "Asigna a cada faena su padrón vigente.", (c, r, u) => c.CargarPadrones(r, u)),
+        new(4, "Recepción de minerales", "4_Recepción_Minerales.xlsx", "Lotes entregados por faena; los lotes ya cargados se omiten.", (c, r, u) => c.CargarRecepciones(r, u)),
+    ];
+
+    [CascadingParameter] private Task<AuthenticationState> Estado { get; set; } = default!;
+    private readonly List<ResumenCarga> _resultados = [];
+    private (int Productores, int Faenas, int FaenasElegibles) _totales;
+    private (int Lotes, DateTime? Hasta) _recepcion;
+    private ResumenDatosPrueba? _resumenPrueba;
+
+    private async Task CompletarPrueba()
+    {
+        var usuario = await Estado.UsuarioAsync();
+        _ocupado = true;
+        _procesando = "los datos de prueba";
+        StateHasChanged();
+        try
+        {
+            _resumenPrueba = await Task.Run(() => DatosPrueba.Completar(usuario.Id));
+            _totales = Fichas.Totales();
+        }
+        catch (Exception ex) { _error = "No se pudieron completar los datos de prueba: " + ex.Message; }
+        finally { _ocupado = false; }
+    }
+    private bool _ocupado;
+    private string? _procesando, _error;
+
+    protected override void OnInitialized() { _totales = Fichas.Totales(); _recepcion = Fichas.ResumenRecepcion(); }
+
+    private async Task Cargar(Planilla p, InputFileChangeEventArgs e)
+    {
+        _error = null;
+        if (!e.File.Name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+        {
+            _error = "Seleccione un archivo .xlsx.";
+            return;
+        }
+        var usuario = await Estado.UsuarioAsync();
+        var temporal = Path.Combine(Path.GetTempPath(), $"enami_{Guid.NewGuid():N}.xlsx");
+        _ocupado = true;
+        _procesando = e.File.Name;
+        StateHasChanged();
+        try
+        {
+            await using (var destino = File.Create(temporal))
+                await e.File.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024).CopyToAsync(destino);
+            var r = await Task.Run(() => p.Accion(Carga, temporal, usuario.Id));
+            _resultados.Insert(0, r);
+            _totales = Fichas.Totales();
+            _recepcion = Fichas.ResumenRecepcion();
+        }
+        catch (Exception ex)
+        {
+            _error = $"No se pudo cargar {e.File.Name}: {ex.Message}";
+        }
+        finally
+        {
+            File.Delete(temporal);
+            _ocupado = false;
+        }
+    }
+}

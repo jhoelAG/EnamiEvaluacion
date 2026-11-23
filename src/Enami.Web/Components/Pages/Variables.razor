@@ -1,0 +1,72 @@
+@page "/variables"
+@rendermode InteractiveServer
+@inject IRepositorioPlantillas Repo
+@inject IRepositorioParametros Parametros
+
+<PageTitle>Variables · Evaluación Fomento</PageTitle>
+
+<h1 class="h3 mb-3">Variables del cálculo</h1>
+
+@if (_vigentes.Count == 0)
+{
+    <div class="alert alert-warning">No hay fórmulas vigentes. La Jefatura debe activarlas en el editor de fórmulas.</div>
+}
+else
+{
+    <div class="row g-2 align-items-end mb-3">
+        <div class="col-md-6">
+            <label class="form-label" for="instrumento">Instrumento de fomento</label>
+            <select id="instrumento" class="form-select" value="@_p?.Id" @onchange="Cambiar">
+                @foreach (var p in _vigentes)
+                {
+                    <option value="@p.Id">@p.Instrumento (v@(p.Version))</option>
+                }
+            </select>
+        </div>
+    </div>
+}
+
+@if (_p is not null)
+{
+    <table class="table table-sm align-middle">
+        <thead><tr><th>Código</th><th>Nombre</th><th>Sección</th><th>Origen</th><th class="text-end">Valor por defecto</th><th>Unidad</th><th class="text-end">Mínimo</th><th class="text-end">Máximo</th><th>Último valor registrado</th></tr></thead>
+        <tbody>
+            @foreach (var v in _p.Variables.Where(x => x.EsNumerica).OrderBy(x => x.Origen).ThenBy(x => x.Orden))
+            {
+                <tr>
+                    <td><code>@v.Codigo</code></td>
+                    <td>@v.Nombre</td>
+                    <td class="small">@v.Seccion</td>
+                    <td>@Formato.Origen(v.Origen)</td>
+                    <td class="text-end">@Formato.Numero(v.ValorPorDefecto)</td>
+                    <td>@v.Unidad</td>
+                    <td class="text-end">@(v.Minimo is null ? "—" : Formato.Numero(v.Minimo.Value))</td>
+                    <td class="text-end">@(v.Maximo is null ? "—" : Formato.Numero(v.Maximo.Value))</td>
+                    <td class="small">@(_ultimos.TryGetValue(v.Codigo, out var u) ? $"{Formato.Numero(u.Valor)} · {u.Fuente} · {u.Fecha:dd-MM-yyyy}" : "—")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+<p class="small text-muted">
+    El dólar y los precios de los minerales se consultan por API y también se pueden ingresar a mano en <a href="mercado">Dólar y minerales</a>.
+    Al evaluar se usa el último valor registrado; si no hay ninguno, el valor por defecto de las fórmulas.
+</p>
+
+@code {
+    private List<PlantillaCalculo> _vigentes = [];
+    private PlantillaCalculo? _p;
+    private IReadOnlyDictionary<string, ValorParametro> _ultimos = new Dictionary<string, ValorParametro>();
+
+    protected override void OnInitialized()
+    {
+        _ultimos = Parametros.Ultimos();
+        _vigentes = Repo.Listar().Where(x => x.Estado == EstadoPlantilla.Vigente).ToList();
+        _p = _vigentes.FirstOrDefault();
+    }
+
+    private void Cambiar(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var id)) _p = _vigentes.FirstOrDefault(x => x.Id == id);
+    }
+}

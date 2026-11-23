@@ -1,0 +1,43 @@
+@inherits LayoutComponentBase
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4 justify-content-between">
+            <span class="contexto-app d-none d-md-inline">Gerencia de Fomento · Evaluación de proyectos</span>
+            <AuthorizeView>
+                <Authorized>
+                    @{ var u = context.User.Usuario(); }
+                    <div class="usuario-sesion d-flex align-items-center gap-2">
+                        <span class="avatar" aria-hidden="true">@Iniciales(u?.NombreCompleto)</span>
+                        <span class="lh-sm">
+                            <strong class="d-block">@u?.NombreCompleto</strong>
+                            <span class="small text-muted">@Roles.Nombre(u?.Rol ?? "")@(u?.Oficina is null ? "" : ", " + u.Oficina)</span>
+                        </span>
+                        <form method="post" action="cuenta/salir" class="ms-3">
+                            <button type="submit" class="btn btn-outline-secondary btn-sm">Salir</button>
+                        </form>
+                    </div>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Ocurrió un error inesperado.
+    <a href="." class="reload">Recargar</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private static string Iniciales(string? nombre) =>
+        string.Concat((nombre ?? "?").Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(p => char.IsUpper(p[0])).Take(2).Select(p => p[0])) is { Length: > 0 } s ? s : "?";
+}

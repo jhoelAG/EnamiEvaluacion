@@ -1,0 +1,106 @@
+@* Campos del formulario y variables de una plantilla: sección, orden, tipo, origen, fuente de precarga, opciones y límites. *@
+<p class="small text-muted">
+    Los campos de origen <strong>Formulario</strong> aparecen en la evaluación de proyecto, agrupados por sección y en el orden indicado. Los de <strong>Mantenedor</strong> y <strong>Robot</strong>
+    son valores generales (precios, tasas, tarifa) que se ven en «Variables». La <strong>fuente</strong> precarga el campo con los datos de la faena;
+    los de presupuesto se calculan con las actividades del Anexo 1. Solo los campos numéricos y de lista se pueden usar en las fórmulas.
+</p>
+<datalist id="secciones-plantilla">
+    @foreach (var s in Plantilla.Variables.Select(v => v.Seccion).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct())
+    {
+        <option value="@s"></option>
+    }
+</datalist>
+<div class="table-responsive">
+    <table class="table table-sm align-middle tabla-compacta">
+        <thead>
+            <tr>
+                <th style="min-width: 85px">Orden</th>
+                <th style="min-width: 170px">Sección</th>
+                <th style="min-width: 175px">Código</th>
+                <th style="min-width: 200px">Nombre</th>
+                <th style="min-width: 120px">Tipo</th>
+                <th style="min-width: 90px">Unidad</th>
+                <th style="min-width: 160px">Origen</th>
+                <th style="min-width: 210px">Fuente (precarga)</th>
+                <th style="min-width: 160px">Opciones de la lista</th>
+                <th style="min-width: 100px">Referencia</th>
+                <th style="min-width: 80px">Mínimo</th>
+                <th style="min-width: 80px">Máximo</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var v in Plantilla.Variables.Select((v, i) => (v, i)).OrderBy(x => x.v.Origen).ThenBy(x => x.v.Orden).ThenBy(x => x.i).Select(x => x.v).ToList())
+            {
+                var numerica = v.EsNumerica;
+                <tr>
+                    <td><input type="number" step="1" class="form-control form-control-sm" aria-label="Orden de @v.Codigo" @bind="v.Orden" @bind:after="Avisar" disabled="@(!Editable)" /></td>
+                    <td><input class="form-control form-control-sm" list="secciones-plantilla" aria-label="Sección de @v.Codigo" @bind="v.Seccion" @bind:after="Avisar" disabled="@(!Editable)" /></td>
+                    <td><input class="form-control form-control-sm font-monospace" aria-label="Código" @bind="v.Codigo" @bind:after="Avisar" disabled="@(!Editable)" /></td>
+                    <td><input class="form-control form-control-sm" aria-label="Nombre de @v.Codigo" @bind="v.Nombre" disabled="@(!Editable)" /></td>
+                    <td>
+                        <select class="form-select form-select-sm" aria-label="Tipo de @v.Codigo" @bind="v.Tipo" @bind:after="Avisar" disabled="@(!Editable)">
+                            @foreach (var t in TiposCampo.Todos) { <option value="@t">@TiposCampo.Nombre(t)</option> }
+                        </select>
+                    </td>
+                    <td><input class="form-control form-control-sm" aria-label="Unidad de @v.Codigo" @bind="v.Unidad" disabled="@(!Editable || !numerica)" /></td>
+                    <td>
+                        <select class="form-select form-select-sm" aria-label="Origen de @v.Codigo" @bind="v.Origen" @bind:after="Avisar" disabled="@(!Editable)">
+                            @foreach (var o in Enum.GetValues<OrigenVariable>()) { <option value="@o">@Formato.Origen(o)</option> }
+                        </select>
+                    </td>
+                    <td>
+                        <select class="form-select form-select-sm" aria-label="Fuente de @v.Codigo" @bind="v.Fuente" disabled="@(!Editable || v.Origen != OrigenVariable.Formulario)">
+                            <option value="">Se ingresa a mano</option>
+                            @foreach (var (codigo, nombre) in FuentesCampo.Todas.Where(f => FuentesCampo.EsTexto(f.Codigo) != numerica || f.Codigo == v.Fuente)) { <option value="@codigo">@nombre</option> }
+                        </select>
+                    </td>
+                    <td><input class="form-control form-control-sm" aria-label="Opciones de @v.Codigo" placeholder="1=Texto;2=Otro" @bind="v.Opciones" @bind:after="Avisar" disabled="@(!Editable || v.Tipo != TiposCampo.Seleccion)" /></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm" aria-label="Valor de referencia de @v.Codigo" @bind="v.ValorPorDefecto" @bind:after="Avisar" disabled="@(!Editable || !numerica)" /></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm" aria-label="Mínimo de @v.Codigo" @bind="v.Minimo" @bind:after="Avisar" disabled="@(!Editable || !numerica)" /></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm" aria-label="Máximo de @v.Codigo" @bind="v.Maximo" @bind:after="Avisar" disabled="@(!Editable || !numerica)" /></td>
+                    <td>
+                        @if (Editable)
+                        {
+                            <button class="btn btn-sm btn-outline-danger" title="Eliminar el campo" aria-label="Eliminar @v.Codigo" @onclick="() => Eliminar(v)">✕</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+@if (Editable)
+{
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" @onclick="() => Agregar(TiposCampo.Numero)">+ Agregar campo numérico</button>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="() => Agregar(TiposCampo.Texto)">+ Agregar campo de texto</button>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public PlantillaCalculo Plantilla { get; set; } = default!;
+    [Parameter] public bool Editable { get; set; }
+    [Parameter] public EventCallback Cambio { get; set; }
+
+    private Task Avisar() => Cambio.InvokeAsync();
+
+    private Task Agregar(string tipo)
+    {
+        int n = 1;
+        while (Plantilla.Variables.Any(v => v.Codigo == $"NuevoCampo{n}")) n++;
+        var ultima = Plantilla.Variables.Where(v => v.Origen == OrigenVariable.Formulario).OrderBy(v => v.Orden).LastOrDefault();
+        Plantilla.Variables.Add(new VariableCalculo
+        {
+            Codigo = $"NuevoCampo{n}", Nombre = "Nuevo campo", Tipo = tipo, Origen = OrigenVariable.Formulario,
+            Seccion = ultima?.Seccion ?? "", Orden = (ultima?.Orden ?? 0) + 1
+        });
+        return Avisar();
+    }
+
+    private Task Eliminar(VariableCalculo v)
+    {
+        Plantilla.Variables.Remove(v);
+        return Avisar();
+    }
+}

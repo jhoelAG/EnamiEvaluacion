@@ -1,0 +1,105 @@
+﻿@page "/"
+@inject ServicioFichas Fichas
+@inject ServicioSolicitudes Solicitudes
+@inject IRepositorioPlantillas Plantillas
+
+<PageTitle>Inicio · Evaluación Fomento</PageTitle>
+
+<h1 class="h3 mb-1">Hola, @_usuario?.NombreCompleto</h1>
+<p class="text-muted mb-4">@Roles.Nombre(_usuario?.Rol ?? "")@(_usuario?.Oficina is null ? " · alcance nacional" : " · " + _usuario.Oficina)</p>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card h-100 indicador"><div class="card-body">
+            <div class="text-muted small">Productores cargados</div>
+            <div class="fs-3 fw-semibold">@_totales.Productores.ToString("N0", Formato.Chile)</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100 indicador"><div class="card-body">
+            <div class="text-muted small">Faenas cargadas</div>
+            <div class="fs-3 fw-semibold">@_totales.Faenas.ToString("N0", Formato.Chile)</div>
+            <div class="small text-muted">@_totales.FaenasElegibles.ToString("N0", Formato.Chile) activas, con oficina y padrón vigente</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100 indicador acento"><div class="card-body">
+            <div class="text-muted small">Evaluaciones en borrador</div>
+            <div class="fs-3 fw-semibold">@_solicitudes.Count(s => s.Estado == EstadosSolicitud.Borrador)</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100 indicador acento"><div class="card-body">
+            <div class="text-muted small">Evaluaciones de proyecto visibles para su rol</div>
+            <div class="fs-3 fw-semibold">@_solicitudes.Count</div>
+        </div></div>
+    </div>
+</div>
+
+@if (_totales.Productores == 0)
+{
+    <div class="alert alert-info">
+        Aún no hay productores ni faenas cargados.
+        <AuthorizeView Roles="@Roles.Administrador" Context="a">
+            <Authorized>Vaya a <a href="planillas">Cargar planillas</a> y suba las fichas de ENAMI.</Authorized>
+            <NotAuthorized>Pida al administrador que cargue las planillas de ENAMI.</NotAuthorized>
+        </AuthorizeView>
+    </div>
+}
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h2 class="h5 mb-0">Últimas evaluaciones de proyecto</h2>
+            <a href="evaluaciones" class="small">Ver todas</a>
+        </div>
+        @if (_solicitudes.Count == 0)
+        {
+            <p class="text-muted small">No hay evaluaciones de proyecto registradas.</p>
+        }
+        else
+        {
+            <table class="table table-sm tabla-compacta align-middle">
+                <thead><tr><th>N.º</th><th>Productor</th><th>Estado</th><th class="text-end">Monto</th></tr></thead>
+                <tbody>
+                    @foreach (var s in _solicitudes.Take(6))
+                    {
+                        <tr>
+                            <td class="num"><a href="evaluaciones/@s.Id">@s.NroSolicitud</a></td>
+                            <td>@s.Productor</td>
+                            <td><EstadoSolicitud Estado="@s.Estado" /></td>
+                            <td class="text-end">@Formato.Dolares((double)s.Monto)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+    <div class="col-lg-5">
+        <h2 class="h5">Fórmulas vigentes</h2>
+        <table class="table table-sm tabla-compacta">
+            <thead><tr><th>Instrumento de fomento</th><th>Versión</th><th>Aprobada por</th></tr></thead>
+            <tbody>
+                @foreach (var p in Plantillas.Listar().Where(p => p.Estado == EstadoPlantilla.Vigente))
+                {
+                    <tr><td>@p.Instrumento</td><td>v@(p.Version)</td><td>@(p.AprobadaPor ?? "—")</td></tr>
+                }
+            </tbody>
+        </table>
+        <p class="small text-muted">Las fórmulas iniciales son de ejemplo y deben reemplazarse por las de la planilla de evaluación de ENAMI.</p>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> Estado { get; set; } = default!;
+    private UsuarioSesion? _usuario;
+    private (int Productores, int Faenas, int FaenasElegibles) _totales;
+    private IReadOnlyList<SolicitudVista> _solicitudes = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _usuario = await Estado.UsuarioAsync();
+        _totales = Fichas.Totales();
+        _solicitudes = Solicitudes.Listar(_usuario);
+    }
+}

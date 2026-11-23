@@ -1,0 +1,200 @@
+@page "/instrumentos"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = $"{Roles.Jefatura},{Roles.Administrador}")]
+@inject ServicioInstrumentos Servicio
+@inject IRepositorioPlantillas Plantillas
+
+<PageTitle>Instrumentos de fomento · Evaluación Fomento</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-1">
+    <h1 class="h3 mb-0">Instrumentos de fomento</h1>
+    <button class="btn btn-primary btn-sm" @onclick="Nuevo">Agregar instrumento</button>
+</div>
+<p class="text-muted small mb-3">
+    Cada instrumento tiene sus propias fórmulas de evaluación. Un instrumento nuevo parte con una copia en borrador de las fórmulas de otro,
+    que la Jefatura de Fomento ajusta y aprueba en el <a href="formulas">editor de fórmulas</a>. Desde ese momento se puede elegir al registrar una evaluación de proyecto.
+</p>
+
+@if (_mensaje is not null)
+{
+    <div class="alert @_claseMensaje py-2" role="status">
+        @_mensaje
+        @if (_enlaceFormulas is byte idf)
+        {
+            <a class="ms-1" href="formulas?instrumento=@idf">Abrir el editor de fórmulas</a>
+        }
+    </div>
+}
+
+@if (_editando)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h2 class="h6 mb-3">@(_idEdicion is null ? "Nuevo instrumento" : $"Editar instrumento N° {_idEdicion}")</h2>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="i-nombre">Nombre</label>
+                    <input id="i-nombre" class="form-control" @bind="_nombre" maxlength="@ServicioInstrumentos.LargoNombre" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="i-desc">Descripción (opcional)</label>
+                    <input id="i-desc" class="form-control" @bind="_descripcion" maxlength="@ServicioInstrumentos.LargoDescripcion" />
+                </div>
+                @if (SinFormulas)
+                {
+                    <div class="col-md-6">
+                        <label class="form-label" for="i-origen">Fórmulas iniciales</label>
+                        <select id="i-origen" class="form-select" @bind="_idOrigen">
+                            <option value="">No copiar ahora</option>
+                            @foreach (var p in _vigentes)
+                            {
+                                <option value="@p.Id">Copiar de «@p.Instrumento» (v@(p.Version))</option>
+                            }
+                        </select>
+                        <div class="form-text">Se crea la versión 1 en borrador; queda disponible para evaluar cuando la Jefatura la active.</div>
+                    </div>
+                }
+                @if (_idEdicion is not null)
+                {
+                    <div class="col-md-6 d-flex align-items-end">
+                        <div class="form-check">
+                            <input id="i-activo" type="checkbox" class="form-check-input" @bind="_activo" />
+                            <label class="form-check-label" for="i-activo">Activo (se ofrece en las evaluaciones nuevas)</label>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="mt-3">
+                <button class="btn btn-primary" @onclick="Guardar">Guardar</button>
+                <button class="btn btn-outline-secondary ms-2" @onclick="() => _editando = false">Cancelar</button>
+            </div>
+        </div>
+    </div>
+}
+
+<table class="table table-sm tabla-compacta align-middle">
+    <thead>
+        <tr><th>N°</th><th>Instrumento</th><th>Fórmulas</th><th class="text-end">Evaluaciones</th><th>Estado</th><th></th></tr>
+    </thead>
+    <tbody>
+        @foreach (var v in _lista)
+        {
+            var i = v.Instrumento;
+            <tr class="@(i.Activo ? "" : "text-muted")">
+                <td>@i.Id</td>
+                <td>
+                    @i.Nombre
+                    @if (!string.IsNullOrEmpty(i.Descripcion)) { <div class="small text-muted">@i.Descripcion</div> }
+                </td>
+                <td class="small">
+                    @if (v.VersionVigente is int vv) { <span class="badge text-bg-success">Vigente v@(vv)</span> }
+                    @if (v.VersionBorrador is int vb) { <span class="badge text-bg-warning ms-1">Borrador v@(vb)</span> }
+                    @if (v.VersionVigente is null && v.VersionBorrador is null) { <span class="text-danger">Sin fórmulas</span> }
+                    else if (v.VersionVigente is null) { <div class="text-danger">Aún no se puede evaluar: falta activar la versión.</div> }
+                </td>
+                <td class="text-end">@v.Evaluaciones</td>
+                <td>
+                    @if (i.Activo) { <span class="badge text-bg-success">Activo</span> }
+                    else { <span class="badge text-bg-secondary">Desactivado</span> }
+                </td>
+                <td class="text-end text-nowrap">
+                    <button class="btn btn-link btn-sm" @onclick="() => Editar(v)">Editar</button>
+                    <a class="btn btn-link btn-sm" href="formulas?instrumento=@i.Id">Fórmulas</a>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+<p class="small text-muted">Los instrumentos no se eliminan porque las evaluaciones guardadas los referencian; uno desactivado deja de ofrecerse en las evaluaciones nuevas y las anteriores lo conservan.</p>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> Estado { get; set; } = default!;
+    private UsuarioSesion? _yo;
+    private IReadOnlyList<InstrumentoVista> _lista = [];
+    private List<PlantillaCalculo> _vigentes = [];
+    private bool _editando, _activo = true;
+    private byte? _idEdicion;
+    private string _nombre = "";
+    private string? _descripcion;
+    private int? _idOrigen;
+    private string? _mensaje;
+    private string _claseMensaje = "alert-success";
+    private byte? _enlaceFormulas;
+
+    /// <summary>El formulario ofrece copiar fórmulas si el instrumento es nuevo o aún no tiene ninguna versión.</summary>
+    private bool SinFormulas => _idEdicion is not byte id || !_conVersiones.Contains(id);
+    private HashSet<byte> _conVersiones = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _yo = await Estado.UsuarioAsync();
+        Recargar();
+    }
+
+    private void Recargar()
+    {
+        _lista = Servicio.Listar();
+        var plantillas = Plantillas.Listar();
+        _vigentes = plantillas.Where(p => p.Estado == EstadoPlantilla.Vigente).ToList();
+        _conVersiones = plantillas.Select(p => p.IdInstrumento).ToHashSet();
+    }
+
+    private void Nuevo()
+    {
+        _idEdicion = null;
+        _nombre = "";
+        _descripcion = null;
+        _activo = true;
+        // por defecto se copian las fórmulas del instrumento con que se evalúa el caso de ejemplo (Anexo 2)
+        _idOrigen = _vigentes.FirstOrDefault(p => p.IdInstrumento == Semilla.InstrumentoAnexo2)?.Id ?? _vigentes.FirstOrDefault()?.Id;
+        _editando = true;
+        _mensaje = null;
+    }
+
+    private void Editar(InstrumentoVista v)
+    {
+        _idEdicion = v.Instrumento.Id;
+        _nombre = v.Instrumento.Nombre;
+        _descripcion = v.Instrumento.Descripcion;
+        _activo = v.Instrumento.Activo;
+        _idOrigen = null;
+        _editando = true;
+        _mensaje = null;
+    }
+
+    private void Guardar()
+    {
+        if (_yo is null) return;
+        _enlaceFormulas = null;
+        try
+        {
+            if (_idEdicion is null)
+            {
+                var (id, borrador) = Servicio.Crear(_nombre, _descripcion, _idOrigen, _yo.Id);
+                Mensaje(borrador is null
+                    ? $"Se agregó el instrumento «{_nombre.Trim()}». Antes de usarlo, cree y active sus fórmulas."
+                    : $"Se agregó el instrumento «{_nombre.Trim()}» con la versión 1 de sus fórmulas en borrador. Revísela y actívela para poder evaluar con él.",
+                    "alert-success");
+                _enlaceFormulas = id;
+            }
+            else
+            {
+                byte id = _idEdicion.Value;
+                bool copiar = _idOrigen is int && SinFormulas;
+                Servicio.Actualizar(id, _nombre, _descripcion, _activo, _yo.Id);
+                if (copiar)
+                {
+                    Plantillas.CrearPrimeraVersion(id, _idOrigen!.Value, _yo.Id);
+                    _enlaceFormulas = id;
+                }
+                Mensaje(copiar ? "Cambios guardados y versión 1 de las fórmulas creada en borrador." : "Cambios guardados.", "alert-success");
+            }
+            _editando = false;
+            Recargar();
+        }
+        catch (ErrorNegocio ex) { Mensaje(ex.Message, "alert-danger"); }
+        catch (InvalidOperationException ex) { Mensaje(ex.Message, "alert-danger"); }
+    }
+
+    private void Mensaje(string texto, string clase) { _mensaje = texto; _claseMensaje = clase; }
+}

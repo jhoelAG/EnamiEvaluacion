@@ -1,0 +1,72 @@
+@page "/cuenta/ingresar"
+@layout LayoutCuenta
+@attribute [AllowAnonymous]
+@inject Microsoft.Extensions.Options.IOptions<OpcionesSemilla> OpcSemilla
+@inject IWebHostEnvironment Entorno
+
+<PageTitle>Ingresar · Evaluación Fomento</PageTitle>
+
+<div class="text-center mb-4">
+    <div class="marca-enami">ENAMI</div>
+    <div class="marca-subtitulo mt-1">Gerencia de Fomento</div>
+    <h1 class="h4 mt-3 mb-1">Evaluación de proyectos de fomento</h1>
+    <p class="text-muted small mb-0">Ingrese con su correo institucional</p>
+</div>
+
+@if (Error == 1)
+{
+    <div class="alert alert-danger py-2 small" role="alert">Correo o contraseña incorrectos, o la cuenta está deshabilitada.</div>
+}
+@if (Expirada == 1)
+{
+    <div class="alert alert-warning py-2 small" role="alert">La sesión se cerró por inactividad. Ingrese nuevamente.</div>
+}
+
+<form method="post" action="cuenta/validar">
+    <AntiforgeryToken />
+    <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+    <div class="mb-3">
+        <label for="correo" class="form-label">Correo</label>
+        <input id="correo" name="correo" type="email" class="form-control" value="@Correo" autocomplete="username" required autofocus />
+    </div>
+    <div class="mb-4">
+        <label for="clave" class="form-label">Contraseña</label>
+        <input id="clave" name="clave" type="password" class="form-control" autocomplete="current-password" required />
+    </div>
+    <button type="submit" class="btn btn-primary w-100">Ingresar</button>
+</form>
+
+@if (MostrarCuentas)
+{
+    <div class="cuentas-prueba mt-4">
+        <div class="small fw-semibold mb-1">Cuentas de prueba</div>
+        <div class="small text-muted mb-2">Todas usan la contraseña <code>@OpcSemilla.Value.ClaveAdministrador</code>. Haga clic en una para completar el formulario.</div>
+        <div class="list-group list-group-flush border rounded">
+            @foreach (var (correo, rol) in Cuentas)
+            {
+                <button type="button" class="list-group-item list-group-item-action py-1 small d-flex justify-content-between gap-2"
+                        data-correo="@correo" data-clave="@OpcSemilla.Value.ClaveAdministrador"
+                        onclick="document.getElementById('correo').value=this.dataset.correo;document.getElementById('clave').value=this.dataset.clave;document.getElementById('clave').focus();">
+                    <span>@correo</span><span class="text-muted text-end">@rol</span>
+                </button>
+            }
+        </div>
+        <div class="small text-muted mt-1">Solo se muestra en el entorno de desarrollo. Si cambió una contraseña desde «Usuarios», esa cuenta usa la nueva.</div>
+    </div>
+}
+
+<p class="text-muted small mt-4 mb-0 text-center">Prototipo del Proyecto de Título INACAP · piloto oficina de Copiapó</p>
+
+@code {
+    [SupplyParameterFromQuery] public int? Error { get; set; }
+    [SupplyParameterFromQuery] public int? Expirada { get; set; }
+    [SupplyParameterFromQuery] public string? Correo { get; set; }
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    /// <summary>La lista de cuentas solo aparece en desarrollo y con las cuentas de demostración activadas (Semilla:UsuariosDemostracion).</summary>
+    private bool MostrarCuentas => Entorno.IsDevelopment() && OpcSemilla.Value.UsuariosDemostracion && !string.IsNullOrWhiteSpace(OpcSemilla.Value.ClaveAdministrador);
+
+    private IEnumerable<(string Correo, string Rol)> Cuentas =>
+        new[] { (OpcSemilla.Value.CorreoAdministrador, Roles.Nombre(Roles.Administrador)) }
+            .Concat(Semilla.UsuariosDemo.Select(u => (u.Correo, Roles.Nombre(u.Rol) + (u.ConOficina ? " · Copiapó" : ""))));
+}

@@ -1,0 +1,300 @@
+@page "/mercado"
+@rendermode InteractiveServer
+@inject IRepositorioPlantillas Repo
+@inject IRepositorioParametros Parametros
+@inject ConsultaMercado Consulta
+@inject ServicioAuditoria Auditoria
+
+<PageTitle>Dólar y minerales · Evaluación Fomento</PageTitle>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
+    <h1 class="h3 mb-0">Dólar y precios de minerales</h1>
+    @if (_puedeEditar)
+    {
+        <button class="btn btn-primary btn-sm" @onclick="() => ConsultarApi(null)" disabled="@_ocupado">@(_ocupado ? "Consultando…" : "Actualizar todo con los valores de hoy")</button>
+    }
+</div>
+<p class="text-muted small mb-3">
+    Todas las evaluaciones de proyecto usan estos valores. El dólar y la libra de cobre se consultan por API al iniciar el sistema y luego cada hora:
+    el dólar observado del Banco Central (directo si hay credenciales, o a través de mindicador.cl) y, si no responde, un tipo de cambio de mercado;
+    el cobre, de COCHILCO a través de mindicador.cl. El oro y la plata los registra el robot BOT-01 desde COCHILCO.
+    También puede <strong>elegir una fecha</strong> para usar el dólar o el cobre de ese día, o ingresar un valor a mano. En ambos casos el valor queda
+    <strong>fijado</strong>: la consulta automática no lo cambia hasta que presione «Volver al valor de hoy». Cada cambio queda en la auditoría.
+</p>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="h6 mb-3">Buscar el valor de una fecha</h2>
+        <div class="row g-2 align-items-end">
+            <div class="col-sm-5 col-md-4">
+                <label class="form-label" for="f-variable">Variable</label>
+                <select id="f-variable" class="form-select" @bind="_codigoFecha" @bind:after="LimpiarBusqueda">
+                    @foreach (var i in ConsultaMercado.Indicadores)
+                    {
+                        <option value="@i.Codigo">@i.Nombre</option>
+                    }
+                </select>
+            </div>
+            <div class="col-sm-4 col-md-3">
+                <label class="form-label" for="f-fecha">Fecha</label>
+                <input id="f-fecha" type="date" class="form-control" @bind="_fecha" @bind:after="LimpiarBusqueda" max="@Hoy" />
+            </div>
+            <div class="col-sm-3 col-md-3">
+                <button class="btn btn-outline-primary" @onclick="BuscarFecha" disabled="@_buscando">@(_buscando ? "Buscando…" : "Buscar")</button>
+            </div>
+        </div>
+        @if (_encontrado is ValorConsultado f)
+        {
+            <div class="mt-3 d-flex flex-wrap align-items-center gap-3">
+                <div>
+                    <span class="fs-5 fw-semibold">@Formato.Numero(f.Valor, 4)</span> <span class="text-muted">@UnidadDe(f.Codigo)</span>
+                    <div class="small text-muted">
+                        @f.Nombre del @f.FechaApi.ToString("dd-MM-yyyy") · @f.Origen
+                        @if (f.FechaApi.Date != _fechaBuscada.Date)
+                        {
+                            <div>El @_fechaBuscada.ToString("dd-MM-yyyy") no hubo valor (fin de semana o feriado): es el del último día hábil anterior.</div>
+                        }
+                    </div>
+                </div>
+                @if (_puedeEditar)
+                {
+                    <button class="btn btn-primary" @onclick="UsarFecha">Usar este valor en las evaluaciones</button>
+                }
+            </div>
+        }
+        @if (_notasFecha.Count > 0)
+        {
+            <div class="small text-muted mt-2">@foreach (var n in _notasFecha) { <div>@n</div> }</div>
+        }
+    </div>
+</div>
+
+@if (_mensaje is not null)
+{
+    <div class="alert @_claseMensaje py-2" role="status">
+        @_mensaje
+        @if (_errores.Count > 0)
+        {
+            <ul class="mb-0 small">@foreach (var e in _errores) { <li>@e</li> }</ul>
+        }
+        @if (_notas.Count > 0)
+        {
+            <div class="small text-muted mt-1">@foreach (var n in _notas) { <div>@n</div> }</div>
+        }
+    </div>
+}
+
+@if (_editando is VariableCalculo ve)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h2 class="h6 mb-3">Ingresar a mano: @ve.Nombre</h2>
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label" for="m-valor">Nuevo valor</label>
+                    <div class="input-group">
+                        <input id="m-valor" type="number" step="any" min="0" class="form-control" @bind="_valor" @bind:after="QuitarConfirmacion" />
+                        <span class="input-group-text">@ve.Unidad</span>
+                    </div>
+                    @if (_ultimos.TryGetValue(ve.Codigo, out var actual))
+                    {
+                        <div class="form-text">Vigente: @Formato.Numero(actual.Valor, 4) @ve.Unidad (@Formato.Fuente(actual.Fuente), @actual.Fecha.ToString("dd-MM-yyyy"))</div>
+                    }
+                </div>
+                <div class="col-md-8">
+                    <button class="btn btn-primary" @onclick="GuardarManual">@(_confirmar ? "Guardar de todos modos" : "Guardar valor manual")</button>
+                    <button class="btn btn-outline-secondary ms-2" @onclick="() => _editando = null">Cancelar</button>
+                </div>
+            </div>
+            @if (_confirmar)
+            {
+                <div class="alert alert-warning py-2 mt-3 mb-0">@_advertencia</div>
+            }
+
+            <h3 class="h6 mt-4">Últimos registros</h3>
+            <table class="table table-sm tabla-compacta mb-0">
+                <thead><tr><th>Registrado</th><th class="text-end">Valor</th><th>Valor del</th><th>Fuente</th></tr></thead>
+                <tbody>
+                    @foreach (var h in _historial)
+                    {
+                        <tr>
+                            <td>@h.Fecha.ToString("dd-MM-yyyy")</td><td class="text-end">@Formato.Numero(h.Valor, 4)</td>
+                            <td>@(h.FechaValor?.ToString("dd-MM-yyyy") ?? "—")</td><td>@Formato.Fuente(h.Fuente)@(h.Fijado ? " (fijado)" : "")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<table class="table table-sm align-middle">
+    <thead>
+        <tr><th>Variable</th><th class="text-end">Valor vigente</th><th>Unidad</th><th>Fuente</th><th>Valor del</th><th>Estado</th><th></th></tr>
+    </thead>
+    <tbody>
+        @foreach (var v in _variables)
+        {
+            <tr>
+                <td>@v.Nombre <div class="small text-muted"><code>@v.Codigo</code></div></td>
+                @if (_ultimos.TryGetValue(v.Codigo, out var u))
+                {
+                    <td class="text-end fw-semibold">@Formato.Numero(u.Valor, 4)</td>
+                    <td>@v.Unidad</td>
+                    <td>@Formato.Fuente(u.Fuente)</td>
+                    <td>@(u.FechaValor is DateTime fv ? fv.ToString("dd-MM-yyyy") : "ingresado el " + u.Fecha.ToString("dd-MM-yyyy"))</td>
+                    <td>
+                        @if (u.Fijado) { <span class="badge text-bg-warning" title="La consulta automática no lo reemplaza">Fijado</span> }
+                        else { <span class="badge text-bg-light border">Automático</span> }
+                    </td>
+                }
+                else
+                {
+                    <td class="text-end text-muted">@Formato.Numero(v.ValorPorDefecto, 4)</td>
+                    <td>@v.Unidad</td>
+                    <td colspan="3" class="small text-muted">Sin registros: se usa el valor por defecto de las fórmulas</td>
+                }
+                <td class="text-end text-nowrap">
+                    @if (_puedeEditar)
+                    {
+                        @if (u?.Fijado == true && ConsultaMercado.Indicadores.Any(i => i.Codigo == v.Codigo))
+                        {
+                            <button class="btn btn-link btn-sm" @onclick="() => ConsultarApi(v.Codigo)" disabled="@_ocupado">Volver al valor de hoy</button>
+                        }
+                        <button class="btn btn-link btn-sm" @onclick="() => Editar(v)">Ingresar a mano</button>
+                    }
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+@if (!_puedeEditar)
+{
+    <p class="small text-muted">Solo la Jefatura de Fomento y el administrador pueden consultar la API o ingresar valores a mano.</p>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> Estado { get; set; } = default!;
+    private UsuarioSesion? _yo;
+    private bool _puedeEditar, _ocupado, _confirmar;
+    private List<VariableCalculo> _variables = [];
+    private IReadOnlyDictionary<string, ValorParametro> _ultimos = new Dictionary<string, ValorParametro>();
+    private VariableCalculo? _editando;
+    private double? _valor;
+    private IReadOnlyList<ValorParametro> _historial = [];
+    private string? _mensaje, _advertencia;
+    private string _claseMensaje = "alert-success";
+    private List<string> _errores = [], _notas = [], _notasFecha = [];
+    private string _codigoFecha = ConsultaMercado.Indicadores[0].Codigo;
+    private DateTime _fecha = DateTime.Today, _fechaBuscada = DateTime.Today;
+    private ValorConsultado? _encontrado;
+    private bool _buscando;
+    private static string Hoy => DateTime.Today.ToString("yyyy-MM-dd");
+
+    private string UnidadDe(string codigo) => _variables.FirstOrDefault(x => x.Codigo.Equals(codigo, StringComparison.OrdinalIgnoreCase))?.Unidad ?? "";
+
+    private void LimpiarBusqueda() { _encontrado = null; _notasFecha = []; }
+
+    private async Task BuscarFecha()
+    {
+        _buscando = true;
+        LimpiarBusqueda();
+        try
+        {
+            _fechaBuscada = _fecha.Date;
+            var (valor, notas) = await Consulta.ConsultarFechaAsync(_codigoFecha, _fechaBuscada);
+            _encontrado = valor;
+            _notasFecha = notas.ToList();
+        }
+        finally { _buscando = false; }
+    }
+
+    private void UsarFecha()
+    {
+        if (!_puedeEditar || _yo is null || _encontrado is not ValorConsultado f) return;
+        Parametros.Registrar(f.Codigo, f.Valor, f.Fuente, f.FechaApi, _yo.Id);
+        Auditoria.Registrar("VARIABLE_REGISTRADA", _yo.Id,
+            detalle: $"{f.Codigo} = {f.Valor.ToString(System.Globalization.CultureInfo.InvariantCulture)} ({f.Fuente}, {f.Origen}, valor del {f.FechaApi:dd-MM-yyyy}, elegido por fecha)");
+        Recargar();
+        Mensaje($"Las evaluaciones usarán {f.Nombre.ToLowerInvariant()} del {f.FechaApi:dd-MM-yyyy}: {Formato.Numero(f.Valor, 4)} {UnidadDe(f.Codigo)}. " +
+                "Queda fijado: la consulta automática no lo cambia hasta que presione «Volver al valor de hoy».", "alert-success");
+        LimpiarBusqueda();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _yo = await Estado.UsuarioAsync();
+        _puedeEditar = _yo.Rol is Roles.Jefatura or Roles.Administrador;
+        // variables de mercado (origen API / robot) de las fórmulas vigentes, sin repetir
+        _variables = Repo.Listar().Where(p => p.Estado == EstadoPlantilla.Vigente)
+            .SelectMany(p => p.Variables).Where(v => v.Origen == OrigenVariable.Robot && v.EsNumerica)
+            .GroupBy(v => v.Codigo, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToList();
+        Recargar();
+    }
+
+    private void Recargar() => _ultimos = Parametros.Ultimos();
+
+    private void QuitarConfirmacion() => _confirmar = false;
+
+    /// <summary>Registra los valores de hoy desde la API (todas las variables o solo una) y deja de estar fijado lo que se actualiza.</summary>
+    private async Task ConsultarApi(string? codigo)
+    {
+        if (!_puedeEditar || _yo is null) return;
+        _ocupado = true;
+        _mensaje = null;
+        _errores = [];
+        _notas = [];
+        try
+        {
+            var r = await Consulta.ConsultarYRegistrarAsync(_yo.Id, soloCodigo: codigo);
+            Recargar();
+            _errores = r.Errores.ToList();
+            _notas = r.Notas.ToList();
+            _mensaje = r.Registrados.Count == 0
+                ? "No se registró ningún valor."
+                : "Valores registrados desde la API: " + string.Join("; ", r.Registrados.Select(v => $"{v.Nombre} = {Formato.Numero(v.Valor, 4)} ({v.Origen})")) + ".";
+            _claseMensaje = r.Errores.Count == 0 ? "alert-success" : "alert-warning";
+            if (_editando is not null) _historial = Parametros.Historial(_editando.Codigo);
+        }
+        finally { _ocupado = false; }
+    }
+
+    private void Editar(VariableCalculo v)
+    {
+        _editando = v;
+        _valor = _ultimos.TryGetValue(v.Codigo, out var u) ? u.Valor : v.ValorPorDefecto;
+        _historial = Parametros.Historial(v.Codigo);
+        _confirmar = false;
+        _mensaje = null;
+    }
+
+    private void GuardarManual()
+    {
+        if (!_puedeEditar || _yo is null || _editando is null) return;
+        if (_valor is not double valor || double.IsNaN(valor) || valor <= 0)
+        {
+            Mensaje("Ingrese un valor mayor que cero.", "alert-danger");
+            return;
+        }
+        // un cambio grande respecto del vigente suele ser un error de digitación (por ejemplo, 9.501 en vez de 950,1): se pide confirmar
+        if (!_confirmar && _ultimos.TryGetValue(_editando.Codigo, out var actual) && actual.Valor > 0 && Math.Abs(valor / actual.Valor - 1) > 0.2)
+        {
+            _advertencia = $"El valor difiere en {Formato.Numero(Math.Abs(valor / actual.Valor - 1) * 100, 0)} % del vigente ({Formato.Numero(actual.Valor, 4)}). Revíselo antes de guardar.";
+            _confirmar = true;
+            return;
+        }
+        try
+        {
+            Parametros.Registrar(_editando.Codigo, valor, "MANUAL", idUsuario: _yo.Id);
+            Auditoria.Registrar("VARIABLE_REGISTRADA", _yo.Id,
+                detalle: $"{_editando.Codigo} = {valor.ToString(System.Globalization.CultureInfo.InvariantCulture)} (MANUAL, ingresado en «Dólar y minerales»)");
+            Recargar();
+            Mensaje($"{_editando.Nombre}: se registró {Formato.Numero(valor, 4)} {_editando.Unidad} como valor manual. Las próximas evaluaciones lo usarán; queda fijado hasta que presione «Volver al valor de hoy».", "alert-success");
+            _editando = null;
+            _confirmar = false;
+        }
+        catch (ArgumentException ex) { Mensaje(ex.Message, "alert-danger"); }
+    }
+
+    private void Mensaje(string texto, string clase) { _mensaje = texto; _claseMensaje = clase; _errores = []; _notas = []; }
+}

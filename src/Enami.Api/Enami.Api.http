@@ -1,0 +1,49 @@
+@api = http://localhost:5151
+@clave = cambiar-esta-clave
+
+### Plantillas
+GET {{api}}/api/plantillas
+X-Api-Key: {{clave}}
+
+### Instrumentos de fomento
+GET {{api}}/api/instrumentos
+X-Api-Key: {{clave}}
+
+### BOT-01 registra el dólar del día
+POST {{api}}/api/variables/Dolar
+X-Api-Key: {{clave}}
+Content-Type: application/json
+
+{ "valor": 945.32, "fuente": "API BCCh" }
+
+### BOT-01 registra el precio del cobre (La Rueda Diaria, COCHILCO)
+POST {{api}}/api/variables/PrecioCuLb
+X-Api-Key: {{clave}}
+Content-Type: application/json
+
+{ "valor": 4.41, "fuente": "RPA COCHILCO" }
+
+### Calcular una evaluación
+POST {{api}}/api/evaluaciones/calcular
+X-Api-Key: {{clave}}
+Content-Type: application/json
+
+{ "idInstrumento": 1, "valores": { "TonelajeMensual": 350, "LeyCu": 2.2, "DistanciaKm": 45 } }
+
+### Validar una fórmula
+POST {{api}}/api/formulas/validar
+X-Api-Key: {{clave}}
+Content-Type: application/json
+
+{ "expresion": "TonelajeMensual * (LeyCu / 100" }
+
+### BOT-03 registra la decisión del Jefe de Oficina o del Subgerente (la opción elegida en el correo de aprobación)
+POST {{api}}/api/evaluaciones/1/decision
+X-Api-Key: {{clave}}
+Content-Type: application/json
+
+{ "correo": "jefe.copiapo@enami.cl", "decision": "Aprobar" }
+
+### Cadena de aprobación de una evaluación
+GET {{api}}/api/evaluaciones/1/aprobaciones
+X-Api-Key: {{clave}}
