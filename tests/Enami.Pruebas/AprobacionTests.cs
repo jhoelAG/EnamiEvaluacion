@@ -51,6 +51,25 @@ public class AprobacionTests
     }
 
     [Fact]
+    public void Una_evaluacion_de_una_faena_que_dejo_de_ser_elegible_no_se_envia_y_queda_en_borrador()
+    {
+        var e = new Entorno();
+        var a = Servicio(e);
+        long id = Evaluacion(e);
+
+        // el padrón vence después de guardar el borrador (error E1 de las pruebas del 24-11-2026)
+        var faena = e.Db.Tabla<Faena>().Single(f => f.Id == e.IdFaenaElegible);
+        faena.VencimientoPadron = DateTime.Today.AddDays(-1);
+        e.Db.Guardar();
+
+        var error = Assert.Throws<ErrorNegocio>(() => a.Enviar(id, e.Sesion(e.IdIngeniero)));
+        Assert.Contains("venció", error.Message);
+        Assert.Equal(EstadosSolicitud.Borrador, Solicitud(e, id).Estado);
+        Assert.Empty(a.Historial(id));
+        Assert.DoesNotContain(e.Db.Tabla<Auditoria>(), x => x.Accion == "SOLICITUD_ENVIADA" && x.IdSolicitud == id);
+    }
+
+    [Fact]
     public void Una_observacion_vuelve_al_ingeniero_que_corrige_y_reenvia()
     {
         var e = new Entorno();

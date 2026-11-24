@@ -71,6 +71,12 @@ public class ServicioAprobaciones(IAlmacen db, ServicioSolicitudes solicitudes, 
             throw new ErrorNegocio("Antes de enviarla a revisión, complete los datos y guarde la evaluación con el cálculo del VAN.");
 
         var faena = db.Tabla<Faena>().First(f => f.Id == s.IdFaena);
+        // RF-14: la elegibilidad se vuelve a revisar al enviar, porque el padrón puede vencer o el productor caer en mora después de crear el borrador
+        var productor = db.Tabla<Productor>().First(p => p.Id == faena.IdProductor);
+        var motivos = ReglasElegibilidad.Evaluar(productor, faena, DateTime.Today);
+        if (motivos.Count > 0)
+            throw new ErrorNegocio("No se puede enviar a revisión: " + string.Join(" ", motivos.Select(m => m.Mensaje)));
+
         var oficina = faena.IdOficina is int io ? db.Tabla<Oficina>().Where(o => o.Id == io).Select(o => o.Nombre).FirstOrDefault() : null;
         var jefe = (faena.IdOficina is null ? null : Aprobadores(Roles.JefeOficina).FirstOrDefault(u => u.IdOficina == faena.IdOficina))
                    ?? throw new ErrorNegocio($"No hay un Jefe de Oficina activo para {oficina ?? "la oficina de esta faena"}. El administrador debe crearlo en «Usuarios».");
