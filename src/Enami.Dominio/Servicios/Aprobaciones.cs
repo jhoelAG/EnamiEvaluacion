@@ -145,6 +145,11 @@ public class ServicioAprobaciones(IAlmacen db, ServicioSolicitudes solicitudes, 
         if (comentario?.Length > LargoComentario) throw new ErrorNegocio($"El comentario tiene como máximo {LargoComentario} caracteres.");
         if (robot is null && d is Observar or Rechazar && comentario is null)
             throw new ErrorNegocio(d == Observar ? "Indique qué debe corregir el ingeniero." : "Indique el motivo del rechazo.");
+        // la base exige causal en toda evaluación rechazada (CK_SOLICITUD_causal): se valida aquí para dar un mensaje claro
+        if (d == Rechazar && idCausal is null)
+            throw new ErrorNegocio(robot is null
+                ? "Seleccione la causal de rechazo."
+                : "Para rechazar hay que elegir la causal: ingrese a la aplicación y rechace la evaluación desde ahí.");
         if (idCausal is short c && !db.Tabla<CausalRechazo>().Any(x => x.Id == c)) throw new ErrorNegocio("La causal de rechazo no existe.");
 
         int nivel = Nivel(db.Tabla<Rol>().Where(r => r.Id == aprobador.IdRol).Select(r => r.Nombre).First());

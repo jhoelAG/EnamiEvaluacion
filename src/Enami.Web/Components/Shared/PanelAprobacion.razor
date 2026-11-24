@@ -51,9 +51,9 @@
                     <div class="fw-semibold mb-2">Su decisión como @(_pendiente!.NivelNombre)</div>
                     <label class="form-label small" for="ap-comentario">Comentario (obligatorio si observa o rechaza)</label>
                     <textarea id="ap-comentario" class="form-control form-control-sm mb-2" rows="2" maxlength="@ServicioAprobaciones.LargoComentario" @bind="_comentario"></textarea>
-                    <label class="form-label small" for="ap-causal">Causal de rechazo (solo si rechaza)</label>
+                    <label class="form-label small" for="ap-causal">Causal de rechazo (obligatoria si rechaza)</label>
                     <select id="ap-causal" class="form-select form-select-sm mb-3" @bind="_idCausal">
-                        <option value="">Sin causal</option>
+                        <option value="">Seleccione una causal…</option>
                         @foreach (var c in _causales)
                         {
                             <option value="@c.Id">@c.Codigo · @c.Descripcion</option>

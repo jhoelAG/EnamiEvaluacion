@@ -116,4 +116,25 @@ public class AprobacionTests
         // ya decidida: un segundo clic en el correo no la cambia
         Assert.Throws<ErrorNegocio>(() => a.DecidirPorCorreo(id, "jefe.copiapo@enami.cl", "Aprobar", null));
     }
+
+    [Fact]
+    public void Un_rechazo_sin_causal_se_detiene_con_un_mensaje_y_no_cambia_la_evaluacion()
+    {
+        // la base exige causal en toda evaluación rechazada (CK_SOLICITUD_causal); sin ella, SQL Server fallaría al guardar
+        var e = new Entorno();
+        var a = Servicio(e);
+        long id = Evaluacion(e);
+        a.Enviar(id, e.Sesion(e.IdIngeniero));
+
+        var enApp = Assert.Throws<ErrorNegocio>(() => a.Decidir(id, e.Sesion(e.IdJefeCopiapo), ServicioAprobaciones.Rechazar, "Leyes bajo el mínimo.", null));
+        Assert.Contains("causal", enApp.Message);
+        var porCorreo = Assert.Throws<ErrorNegocio>(() => a.DecidirPorCorreo(id, "jefe.copiapo@enami.cl", "Rechazar", null));
+        Assert.Contains("causal", porCorreo.Message);
+
+        // la evaluación sigue en revisión y la decisión sigue pendiente del Jefe de Oficina
+        var s = Solicitud(e, id);
+        Assert.Equal(EstadosSolicitud.EnRevision, s.Estado);
+        Assert.Null(s.IdCausal);
+        Assert.Contains(id, a.PendientesDe(e.IdJefeCopiapo));
+    }
 }
