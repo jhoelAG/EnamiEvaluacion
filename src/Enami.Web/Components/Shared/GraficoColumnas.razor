@@ -14,8 +14,10 @@
         @for (double t = 0; t <= _escala.Tope + 0.001; t += _escala.Paso)
         {
             var y = Y(t);
-            <line x1="@N(Izq)" x2="@N(Ancho - 4)" y1="@N(y)" y2="@N(y)" stroke="@Graficos.Grilla" stroke-width="1" />
-            <text x="@N(Izq - 6)" y="@N(y + 4)" text-anchor="end" font-size="11" fill="@Graficos.TextoSecundario">@t.ToString("N0", Formato.Chile)</text>
+            <g>
+                <line x1="@N(Izq)" x2="@N(Ancho - 4)" y1="@N(y)" y2="@N(y)" stroke="@Graficos.Grilla" stroke-width="1" />
+                <text x="@N(Izq - 6)" y="@N(y + 4)" text-anchor="end" font-size="11" fill="@Graficos.TextoSecundario">@t.ToString("N0", Formato.Chile)</text>
+            </g>
         }
         @for (int i = 0; i < Categorias.Count; i++)
         {
@@ -43,9 +45,9 @@
             }
             if (total > 0)
             {
-                <text x="@N(cx)" y="@N(Y(total) - 5)" text-anchor="middle" font-size="11" font-weight="600" fill="#2E3236">@total.ToString("N0", Formato.Chile)</text>
+                <g><text x="@N(cx)" y="@N(Y(total) - 5)" text-anchor="middle" font-size="11" font-weight="600" fill="#2E3236">@total.ToString("N0", Formato.Chile)</text></g>
             }
-            <text x="@N(cx)" y="@N(Alto - 6)" text-anchor="middle" font-size="11" fill="@Graficos.TextoSecundario">@Categorias[i]</text>
+            <g><text x="@N(cx)" y="@N(Alto - 6)" text-anchor="middle" font-size="11" fill="@Graficos.TextoSecundario">@Categorias[i]</text></g>
         }
     </svg>
 </div>

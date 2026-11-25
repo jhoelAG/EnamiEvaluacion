@@ -8,7 +8,10 @@ eval "$(/opt/homebrew/bin/brew shellenv zsh 2>/dev/null || true)"
 RG=rg-enami-jhoel
 MENSAJE="${1:-}"
 
-echo "== 1/4 Pruebas =="
+echo "== 1/4 Compilar y probar =="
+# se compilan también la web y la API: las pruebas solo compilan el dominio, y no se debe guardar código que no compila
+dotnet build src/Enami.Web/Enami.Web.csproj
+dotnet build src/Enami.Api/Enami.Api.csproj
 dotnet test
 
 echo "== 2/4 Git =="

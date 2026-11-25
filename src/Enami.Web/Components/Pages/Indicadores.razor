@@ -99,18 +99,18 @@
                     }
                     <h3 class="h6 mt-4 mb-2">Por tipo de productor</h3>
                     <div class="d-flex" style="height:28px;gap:2px" role="img" aria-label="@AriaTipoProductor">
-                        @foreach (var (m, i) in g.MontoPorTipoProductor.Select((m, i) => (m, i)))
+                        @foreach (var (m, nro) in g.MontoPorTipoProductor.Select((m, k) => (m, k)))
                         {
                             <div class="d-flex align-items-center px-2 small fw-semibold text-white" title="@m.Grupo: @Formato.Dolares((double)m.Monto)"
-                                 style="flex:@Graficos.N(Math.Max(m.Porcentaje, 0.1)) 1 0;border-radius:4px;background:@(i == 0 ? Graficos.Turquesa : Graficos.Naranjo)">
+                                 style="flex:@Graficos.N(Math.Max(m.Porcentaje, 0.1)) 1 0;border-radius:4px;background:@(nro == 0 ? Graficos.Turquesa : Graficos.Naranjo)">
                                 @if (m.Porcentaje >= 12) { @Pct(m.Porcentaje) }
                             </div>
                         }
                     </div>
                     <div class="d-flex flex-wrap gap-3 small mt-1">
-                        @foreach (var (m, i) in g.MontoPorTipoProductor.Select((m, i) => (m, i)))
+                        @foreach (var (m, nro) in g.MontoPorTipoProductor.Select((m, k) => (m, k)))
                         {
-                            <span class="d-inline-flex align-items-center gap-1"><span style="width:10px;height:10px;border-radius:2px;display:inline-block;background:@(i == 0 ? Graficos.Turquesa : Graficos.Naranjo)"></span>@m.Grupo · @Formato.Dolares((double)m.Monto)</span>
+                            <span class="d-inline-flex align-items-center gap-1"><span style="width:10px;height:10px;border-radius:2px;display:inline-block;background:@(nro == 0 ? Graficos.Turquesa : Graficos.Naranjo)"></span>@m.Grupo · @Formato.Dolares((double)m.Monto)</span>
                         }
                     </div>
                 }
