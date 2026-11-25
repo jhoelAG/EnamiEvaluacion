@@ -42,9 +42,12 @@ PY
     az rest --method put --url "$BASE/Microsoft.Logic/workflows/bot03-aprobacion?api-version=2016-06-01" --body @"$CUERPO" -o none
     rm -f "$CUERPO"
     URL=$(az rest --method post --url "$BASE/Microsoft.Logic/workflows/bot03-aprobacion/triggers/Aviso_de_la_aplicacion/listCallbackUrl?api-version=2016-06-01" --query value -o tsv)
+    # clave para firmar los correos de aprobación: la misma en la web y en la API; se conserva si ya existe
+    FIRMA=$(az webapp config appsettings list --resource-group $RG --name $WEB_APP --query "[?name=='Flujos__ClaveFirma'].value" -o tsv)
+    [ -n "$FIRMA" ] || FIRMA=$(openssl rand -hex 32)
     for app in $WEB_APP $API_APP; do
       az webapp config appsettings set --resource-group $RG --name $app \
-        --settings "Flujos__UrlAprobacion=$URL" "Flujos__UrlWeb=$URL_WEB" "Flujos__UrlApi=$URL_API" -o none
+        --settings "Flujos__UrlAprobacion=$URL" "Flujos__UrlWeb=$URL_WEB" "Flujos__UrlApi=$URL_API" "Flujos__ClaveFirma=$FIRMA" -o none
     done
     echo "BOT-03 creado y conectado con la web y la API (correo de pruebas: ${CORREO_PRUEBAS:-ninguno})."
     ;;

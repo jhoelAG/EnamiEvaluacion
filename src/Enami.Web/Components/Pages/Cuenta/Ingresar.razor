@@ -17,6 +17,17 @@
 {
     <div class="alert alert-danger py-2 small" role="alert">Correo o contraseña incorrectos, o la cuenta está deshabilitada.</div>
 }
+@if (Error == 2)
+{
+    <div class="alert alert-danger py-2 small" role="alert">
+        Por seguridad, el ingreso con este correo quedó bloqueado por @ServicioUsuarios.IntentosMaximos intentos fallidos.
+        Intente nuevamente en @(Minutos ?? ServicioUsuarios.MinutosBloqueo) @((Minutos ?? 2) == 1 ? "minuto" : "minutos").
+    </div>
+}
+@if (Error == 3)
+{
+    <div class="alert alert-warning py-2 small" role="alert">Demasiados intentos de ingreso desde este equipo. Espere un minuto e intente nuevamente.</div>
+}
 @if (Expirada == 1)
 {
     <div class="alert alert-warning py-2 small" role="alert">La sesión se cerró por inactividad. Ingrese nuevamente.</div>
@@ -60,6 +71,7 @@
 @code {
     [SupplyParameterFromQuery] public int? Error { get; set; }
     [SupplyParameterFromQuery] public int? Expirada { get; set; }
+    [SupplyParameterFromQuery] public int? Minutos { get; set; }
     [SupplyParameterFromQuery] public string? Correo { get; set; }
     [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
 

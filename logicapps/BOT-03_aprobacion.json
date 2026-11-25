@@ -115,6 +115,12 @@
                   "string",
                   "null"
                 ]
+              },
+              "tokenDecision": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -171,7 +177,8 @@
                   "body": {
                     "correo": "@{triggerBody()?['aprobador']?['correo']}",
                     "decision": "@{body('Enviar_correo_de_aprobacion')?['SelectedOption']}",
-                    "comentario": "@{if(equals(body('Enviar_correo_de_aprobacion')?['SelectedOption'], 'Observar'), 'Observada desde el correo de aprobación: el aprobador indicará qué corregir.', 'Aprobada desde el correo de aprobación.')}"
+                    "comentario": "@{if(equals(body('Enviar_correo_de_aprobacion')?['SelectedOption'], 'Observar'), 'Observada desde el correo de aprobación: el aprobador indicará qué corregir.', 'Aprobada desde el correo de aprobación.')}",
+                    "token": "@{triggerBody()?['tokenDecision']}"
                   }
                 },
                 "runAfter": {

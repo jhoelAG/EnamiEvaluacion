@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 // Las consultas a las API de mercado solo dejan en el registro los avisos, no el detalle de cada solicitud HTTP.
@@ -41,11 +43,29 @@ builder.Services.Configure<OpcionesMercado>(builder.Configuration.GetSection("Me
 builder.Services.AddHttpClient<ConsultaMercado>();
 builder.Services.AddHostedService<ConsultaMercadoAutomatica>();
 
+// Límite de intentos de ingreso por dirección IP (además del bloqueo por cuenta tras 5 intentos fallidos, en ServicioUsuarios):
+// frena que se prueben contraseñas en muchas cuentas desde un mismo equipo.
+builder.Services.AddRateLimiter(o =>
+{
+    o.AddPolicy("ingreso", http => RateLimitPartition.GetFixedWindowLimiter(
+        http.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    o.OnRejected = (contexto, _) =>
+    {
+        contexto.HttpContext.Response.Redirect("/cuenta/ingresar?error=3");
+        return ValueTask.CompletedTask;
+    };
+});
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
     .AddHubOptions(o => o.MaximumReceiveMessageSize = 64 * 1024);
 
 var app = builder.Build();
+
+// Fuera de desarrollo, con el flujo de aprobación configurado, la clave para firmar los correos de aprobación es obligatoria.
+if (!app.Environment.IsDevelopment() && (app.Configuration.GetSection("Flujos").Get<OpcionesFlujos>()?.FaltaClaveFirma ?? false))
+    throw new InvalidOperationException("Falta Flujos:ClaveFirma: sin ella los correos de aprobación no llevan el código firmado y la API los rechazaría.");
 
 // Crea la base de datos y los catálogos; si la base está vacía y existe la carpeta de planillas, las carga.
 app.Services.PrepararBaseDatos(app.Environment.ContentRootPath, cargarPlanillas: true);
@@ -60,6 +80,7 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
@@ -72,10 +93,15 @@ app.MapPost("/cuenta/validar", async (HttpContext http, [FromForm] string correo
 {
     var sesion = usuarios.Autenticar(correo, clave);
     if (sesion is null)
-        return Results.Redirect($"/cuenta/ingresar?error=1&correo={Uri.EscapeDataString(correo ?? "")}&returnUrl={Uri.EscapeDataString(returnUrl ?? "/")}");
+    {
+        // con el ingreso bloqueado se informa cuánto falta; si no, el mensaje no dice si el correo existe
+        var bloqueo = usuarios.Bloqueo(correo);
+        var error = bloqueo is TimeSpan b ? $"2&minutos={Math.Max(1, (int)Math.Ceiling(b.TotalMinutes))}" : "1";
+        return Results.Redirect($"/cuenta/ingresar?error={error}&correo={Uri.EscapeDataString(correo ?? "")}&returnUrl={Uri.EscapeDataString(returnUrl ?? "/")}");
+    }
     await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, Sesion.Principal(sesion));
     return Results.LocalRedirect(string.IsNullOrEmpty(returnUrl) || !returnUrl.StartsWith('/') || returnUrl.StartsWith("//") ? "/" : returnUrl);
-}).AllowAnonymous();
+}).AllowAnonymous().RequireRateLimiting("ingreso");
 
 app.MapMethods("/cuenta/salir", ["GET", "POST"], async (HttpContext http, string? motivo) =>
 {

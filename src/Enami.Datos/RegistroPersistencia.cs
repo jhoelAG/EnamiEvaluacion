@@ -146,8 +146,18 @@ public static class RegistroPersistencia
         contexto.Database.ExecuteSqlRaw(sql);
         contexto.Database.ExecuteSqlRaw(SqlInstrumentos);
         contexto.Database.ExecuteSqlRaw(SqlFuentes);
+        contexto.Database.ExecuteSqlRaw(SqlAuditoriaSoloInsercion);
         log.LogInformation("Esquema revisado: tablas y columnas de los sprints 4 y 5 presentes.");
     }
+
+    /// <summary>La auditoría es de solo inserción: un trigger rechaza cualquier UPDATE o DELETE sobre AUDITORIA.</summary>
+    private const string SqlAuditoriaSoloInsercion = """
+        IF OBJECT_ID(N'TR_AUDITORIA_solo_insercion', N'TR') IS NULL
+            EXEC(N'CREATE TRIGGER TR_AUDITORIA_solo_insercion ON AUDITORIA INSTEAD OF UPDATE, DELETE AS
+                   BEGIN
+                       THROW 51000, ''AUDITORIA es de solo inserción: sus registros no se pueden modificar ni borrar.'', 1;
+                   END');
+        """;
 
     /// <summary>
     /// Sprint 5: se admite la fuente API_EXTERNA (tipo de cambio de mercado, respaldo cuando el Banco Central no responde),

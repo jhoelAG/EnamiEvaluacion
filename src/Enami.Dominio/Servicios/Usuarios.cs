@@ -95,13 +95,26 @@ public class ServicioUsuarios(IAlmacen db, IHasherClaves hasher, ServicioAuditor
     }
 
     /// <summary>Verifica correo y contraseña. Devuelve null si no coinciden o si el usuario está deshabilitado.</summary>
+    /// <summary>Intentos fallidos permitidos dentro de la ventana antes de bloquear el ingreso con ese correo.</summary>
+    public const int IntentosMaximos = 5;
+    /// <summary>Minutos de la ventana de intentos y del bloqueo.</summary>
+    public const int MinutosBloqueo = 15;
+
     public UsuarioSesion? Autenticar(string correo, string clave)
     {
         correo = (correo ?? "").Trim().ToLowerInvariant();
         var u = db.Tabla<Usuario>().FirstOrDefault(x => x.Correo == correo);
+        // con el ingreso bloqueado ni siquiera se revisa la contraseña: así no se pueden seguir probando claves
+        if (Bloqueo(correo) is not null)
+        {
+            auditoria.Registrar("INGRESO_BLOQUEADO", u?.Id, detalle: correo);
+            return null;
+        }
         if (u is null || string.IsNullOrEmpty(clave) || !hasher.Verificar(u.ClaveHash, clave))
         {
             auditoria.Registrar("INGRESO_FALLIDO", u?.Id, detalle: correo);
+            if (Bloqueo(correo) is not null)
+                auditoria.Registrar("CUENTA_BLOQUEADA", u?.Id, detalle: $"{correo}: {IntentosMaximos} intentos fallidos; ingreso bloqueado por {MinutosBloqueo} minutos");
             return null;
         }
         if (!u.Activo)
@@ -111,6 +124,29 @@ public class ServicioUsuarios(IAlmacen db, IHasherClaves hasher, ServicioAuditor
         }
         auditoria.Registrar("INGRESO", u.Id);
         return Sesion(u.Id);
+    }
+
+    /// <summary>
+    /// Tiempo que falta para poder ingresar con ese correo, o null si no está bloqueado. Se bloquea tras <see cref="IntentosMaximos"/>
+    /// intentos fallidos en <see cref="MinutosBloqueo"/> minutos, contados desde el último ingreso correcto; el bloqueo dura
+    /// <see cref="MinutosBloqueo"/> minutos desde el último intento fallido. Se calcula con la auditoría, así que no se pierde al reiniciar.
+    /// </summary>
+    public TimeSpan? Bloqueo(string correo, DateTime? ahora = null)
+    {
+        correo = (correo ?? "").Trim().ToLowerInvariant();
+        var momento = ahora ?? DateTime.Now;
+        var desde = momento.AddMinutes(-MinutosBloqueo);
+        var fallos = db.Tabla<Auditoria>().Where(a => a.Accion == "INGRESO_FALLIDO" && a.Fecha >= desde && a.Detalle == correo)
+            .Select(a => a.Fecha).ToList();
+        if (fallos.Count < IntentosMaximos) return null;
+        var id = db.Tabla<Usuario>().Where(x => x.Correo == correo).Select(x => (int?)x.Id).FirstOrDefault();
+        var ultimoIngreso = id is int i
+            ? db.Tabla<Auditoria>().Where(a => a.Accion == "INGRESO" && a.IdUsuario == i && a.Fecha >= desde).Select(a => (DateTime?)a.Fecha).Max()
+            : null;
+        var vigentes = fallos.Where(f => ultimoIngreso is null || f > ultimoIngreso).ToList();
+        if (vigentes.Count < IntentosMaximos) return null;
+        var resta = vigentes.Max().AddMinutes(MinutosBloqueo) - momento;
+        return resta > TimeSpan.Zero ? resta : null;
     }
 
     /// <summary>Datos actuales de la sesión; null si el usuario ya no existe o fue deshabilitado (se revisa periódicamente).</summary>

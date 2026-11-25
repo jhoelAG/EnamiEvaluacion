@@ -21,10 +21,19 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 // Clave simple para los robots (cabecera X-Api-Key). En producción se reemplaza por Microsoft Entra ID.
+// Fuera de desarrollo la API no arranca sin clave (quedaría abierta) ni, con el flujo de aprobación configurado, sin la clave de firma.
 string claveApi = app.Configuration["ClaveApiRobots"] ?? "";
+var flujos = app.Configuration.GetSection("Flujos").Get<OpcionesFlujos>() ?? new OpcionesFlujos();
+if (!app.Environment.IsDevelopment())
+{
+    if (string.IsNullOrWhiteSpace(claveApi))
+        throw new InvalidOperationException("Falta ClaveApiRobots: sin clave la API aceptaría cualquier llamada.");
+    if (flujos.FaltaClaveFirma)
+        throw new InvalidOperationException("Falta Flujos:ClaveFirma: sin ella no se pueden verificar las decisiones por correo.");
+}
 var robots = app.MapGroup("/api").AddEndpointFilter(async (ctx, next) =>
 {
-    if (claveApi.Length > 0 && ctx.HttpContext.Request.Headers["X-Api-Key"] != claveApi)
+    if (claveApi.Length > 0 && !FirmaDecision.Iguales(claveApi, ctx.HttpContext.Request.Headers["X-Api-Key"].ToString()))
         return Results.Unauthorized();
     return await next(ctx);
 });
@@ -80,10 +89,20 @@ robots.MapPost("/formulas/validar", (ValidarFormula f) =>
 
 // BOT-03: el flujo de aprobación (Logic App) registra aquí la decisión que el aprobador tomó en el correo
 // («Aprobar», «Observar» o «Rechazar»). Si hay un siguiente nivel, la API avisa al flujo para que envíe el próximo correo.
-robots.MapPost("/evaluaciones/{id:long}/decision", async (long id, DecisionFlujo d, ServicioAprobaciones aprobaciones, INotificadorFlujos notificador) =>
+robots.MapPost("/evaluaciones/{id:long}/decision", async (long id, DecisionFlujo d, ServicioAprobaciones aprobaciones, INotificadorFlujos notificador,
+                                                          ServicioAuditoria auditoria) =>
 {
     try
     {
+        // con clave de firma, la decisión debe traer el código firmado de la aprobación pendiente y venir del aprobador asignado
+        var pendiente = aprobaciones.Pendiente(id);
+        if (!string.IsNullOrWhiteSpace(flujos.ClaveFirma) && pendiente is not null
+            && (!string.Equals(pendiente.Correo, d.Correo?.Trim(), StringComparison.OrdinalIgnoreCase)
+                || !FirmaDecision.Verificar(flujos.ClaveFirma, pendiente.Id, id, pendiente.Correo, d.Token)))
+        {
+            auditoria.Registrar("DECISION_NO_AUTORIZADA", null, id, $"Decisión por correo rechazada: código inválido o aprobador distinto ({d.Correo})", robot: "BOT-03");
+            return Results.Json(new { error = "La decisión no trae un código válido para esta aprobación." }, statusCode: StatusCodes.Status403Forbidden);
+        }
         var r = aprobaciones.DecidirPorCorreo(id, d.Correo, d.Decision, d.Comentario);
         var avisos = new List<string>();
         foreach (var e in r.Eventos)
@@ -106,5 +125,6 @@ public record SolicitudCalculo(byte? IdInstrumento, string? Instrumento, Diction
 public record RegistroVariable(double Valor, string? Fuente);
 public record ValidarFormula(string Expresion);
 /// <summary>Decisión que envía el flujo: el correo del aprobador y la opción que eligió en el correo de aprobación.</summary>
-public record DecisionFlujo(string Correo, string Decision, string? Comentario);
+/// <summary>Token: el código firmado que la aplicación incluyó en el aviso de esa aprobación (FirmaDecision).</summary>
+public record DecisionFlujo(string Correo, string Decision, string? Comentario, string? Token = null);
 public partial class Program;

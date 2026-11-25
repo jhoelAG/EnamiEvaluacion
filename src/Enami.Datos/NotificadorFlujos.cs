@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Enami.Dominio.Modelo;
+using Enami.Dominio.Persistencia;
 using Enami.Dominio.Servicios;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -19,10 +21,18 @@ public class OpcionesFlujos
     public string? UrlWeb { get; set; }
     /// <summary>Dirección pública de la API, donde el flujo registra la decisión (https://enami-api-….azurewebsites.net).</summary>
     public string? UrlApi { get; set; }
+    /// <summary>
+    /// Clave secreta con que se firman los correos de aprobación (variable Flujos__ClaveFirma, la misma en la web y en la API).
+    /// La API solo registra una decisión por correo con el código firmado de esa aprobación.
+    /// </summary>
+    public string? ClaveFirma { get; set; }
+
+    /// <summary>Con el flujo configurado, la clave de firma es obligatoria fuera de desarrollo.</summary>
+    public bool FaltaClaveFirma => !string.IsNullOrWhiteSpace(UrlAprobacion) && string.IsNullOrWhiteSpace(ClaveFirma);
 }
 
 /// <summary>Envía los avisos de aprobación a la Logic App con un POST JSON. El flujo responde 202 y continúa por su cuenta.</summary>
-public class NotificadorFlujosHttp(HttpClient http, IOptions<OpcionesFlujos> opciones, ILogger<NotificadorFlujosHttp> log) : INotificadorFlujos
+public class NotificadorFlujosHttp(HttpClient http, IOptions<OpcionesFlujos> opciones, IAlmacen db, ILogger<NotificadorFlujosHttp> log) : INotificadorFlujos
 {
     public async Task<string?> EnviarAsync(EventoFlujo evento, CancellationToken ct = default)
     {
@@ -40,7 +50,16 @@ public class NotificadorFlujosHttp(HttpClient http, IOptions<OpcionesFlujos> opc
             espera.CancelAfter(TimeSpan.FromSeconds(20));
             // Se envía el JSON completo con su largo (Content-Length): el desencadenador HTTP de Logic Apps
             // recibe vacío un cuerpo enviado en trozos (Transfer-Encoding: chunked), como el de PostAsJsonAsync.
-            using var contenido = new StringContent(JsonSerializer.Serialize(e, JsonSerializerOptions.Web), Encoding.UTF8, "application/json");
+            var cuerpo = JsonSerializer.SerializeToNode(e, JsonSerializerOptions.Web)!.AsObject();
+            if (e.Tipo == "APROBACION_PENDIENTE" && e.Aprobador is not null && !string.IsNullOrWhiteSpace(o.ClaveFirma))
+            {
+                // código firmado de la aprobación pendiente: el flujo lo devuelve junto con la decisión
+                var pendiente = db.Tabla<Aprobacion>().Where(a => a.IdSolicitud == e.IdEvaluacion && a.FechaDecision == null)
+                    .OrderByDescending(a => a.Id).FirstOrDefault();
+                if (pendiente is not null)
+                    cuerpo["tokenDecision"] = FirmaDecision.Generar(o.ClaveFirma, pendiente.Id, e.IdEvaluacion, e.Aprobador.Correo);
+            }
+            using var contenido = new StringContent(cuerpo.ToJsonString(), Encoding.UTF8, "application/json");
             using var r = await http.PostAsync(o.UrlAprobacion, contenido, espera.Token);
             if (r.IsSuccessStatusCode) return null;
             log.LogWarning("Flujo de aprobación: respondió {Codigo} al aviso {Tipo} de la evaluación {Id}.", (int)r.StatusCode, e.Tipo, e.IdEvaluacion);
