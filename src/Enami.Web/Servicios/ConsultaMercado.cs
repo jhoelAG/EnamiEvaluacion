@@ -226,8 +226,9 @@ public class ConsultaMercado(HttpClient http, IRepositorioParametros parametros,
         pedido.Headers.Accept.ParseAdd("application/json");
         using var respuesta = await cliente.SendAsync(pedido, HttpCompletionOption.ResponseHeadersRead, espera.Token);
         respuesta.EnsureSuccessStatusCode();
-        await using var flujo = await respuesta.Content.ReadAsStreamAsync(espera.Token);
-        return await JsonDocument.ParseAsync(flujo, cancellationToken: espera.Token);
+        // el Banco Central envía las tildes en Latin-1: se decodifica con BancoCentral.Decodificar (UTF-8 si es válido)
+        var bytes = await respuesta.Content.ReadAsByteArrayAsync(espera.Token);
+        return JsonDocument.Parse(BancoCentral.Decodificar(bytes));
     }
 
     /// <summary>Mensaje legible: el de la excepción más interna (por ejemplo, la del socket), no «see inner exception».</summary>

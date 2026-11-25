@@ -9,6 +9,8 @@ builder.Services.AddOpenApi();
 
 // Misma base de datos que la interfaz web (ConnectionStrings:Enami) y los mismos servicios de dominio.
 builder.Services.AddPersistenciaEnami(builder.Configuration);
+// cliente para la API oficial del Banco Central (BOT-01)
+builder.Services.AddHttpClient("BancoCentral", c => { c.Timeout = TimeSpan.FromSeconds(30); c.DefaultRequestHeaders.UserAgent.ParseAdd("EnamiEvaluacion/1.0"); });
 
 var app = builder.Build();
 // La interfaz web crea la base y carga los catálogos; en modo Memoria la API tiene su propio almacén y debe prepararlo.
@@ -63,29 +65,37 @@ robots.MapPost("/evaluaciones/calcular", (SolicitudCalculo s, IRepositorioPlanti
 // BOT-01: registra el valor del día de una variable (dólar, precio del cobre, etc.) (RF-05 y RF-25)
 robots.MapPost("/variables/{codigo}", (string codigo, RegistroVariable v, IRepositorioParametros parametros, ServicioAuditoria auditoria) =>
 {
+    DateTime? fechaValor = DateTime.TryParseExact(v.FechaValor, "dd-MM-yyyy", System.Globalization.CultureInfo.InvariantCulture,
+        System.Globalization.DateTimeStyles.None, out var f) ? f : null;
+    return RegistrarVariable(codigo, v.Valor, v.Fuente, fechaValor, parametros, auditoria);
+});
+
+// BOT-01: consulta la API oficial del Banco Central (dólar observado, cobre, oro y plata) y registra la última observación publicada.
+// La consulta la hace la API y no Logic Apps porque el Banco Central responde con tildes en Latin-1, que Logic Apps no acepta;
+// así, además, la clave del Banco Central queda solo en la configuración de la API.
+robots.MapPost("/bancocentral/{codigo}", async (string codigo, IConfiguration config, IHttpClientFactory clientes,
+    IRepositorioParametros parametros, ServicioAuditoria auditoria, CancellationToken ct) =>
+{
+    if (!BancoCentral.Series.TryGetValue(codigo, out var serie))
+        return Results.NotFound(new { error = $"«{codigo}» no tiene serie del Banco Central. Válidas: {string.Join(", ", BancoCentral.Series.Keys)}." });
+    string usuario = config["Mercado:UsuarioBancoCentral"] ?? "", clave = config["Mercado:ClaveBancoCentral"] ?? "";
+    if (usuario.Length == 0 || clave.Length == 0)
+        return Results.Problem("Faltan Mercado:UsuarioBancoCentral y Mercado:ClaveBancoCentral en la configuración de la API.", statusCode: 503);
+    string texto;
     try
     {
-        // un valor que fijó una persona en «Dólar y minerales» (a mano o eligiendo una fecha) no lo reemplaza el robot
-        var vigentes = parametros.Ultimos();
-        if (vigentes.TryGetValue(codigo, out var actual) && actual.Fijado)
-            return Results.Conflict(new { error = $"«{codigo}» está fijado por un usuario en «Dólar y minerales»; no se reemplaza.", vigente = actual });
-        // validación de rango: un valor muy distinto del vigente (error de unidad o de la fuente) no se guarda; el robot prueba su respaldo
-        if (ValidacionMercado.Revisar(codigo, v.Valor, vigentes.TryGetValue(codigo, out var previo) ? previo.Valor : null) is string motivo)
-        {
-            auditoria.Registrar("VARIABLE_RECHAZADA", null, robot: "BOT-01", detalle: motivo);
-            return Results.UnprocessableEntity(new { error = motivo });
-        }
-        // día al que corresponde el valor según la fuente (el Banco Central no publica los metales todos los días)
-        DateTime? fechaValor = DateTime.TryParseExact(v.FechaValor, "dd-MM-yyyy", System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.None, out var f) ? f : null;
-        parametros.Registrar(codigo, v.Valor, string.IsNullOrWhiteSpace(v.Fuente) ? "BOT-01" : v.Fuente, fechaValor);
-        auditoria.Registrar("VARIABLE_REGISTRADA", null, robot: "BOT-01", detalle: $"{codigo} = {v.Valor} ({RepositorioParametros.NormalizarFuente(v.Fuente ?? "BOT-01")})");
-        return Results.Ok(parametros.Ultimos()[codigo]);
+        using var respuesta = await clientes.CreateClient("BancoCentral").GetAsync(BancoCentral.Consulta(usuario, clave, serie.Serie, DateTime.Today), ct);
+        if (!respuesta.IsSuccessStatusCode)
+            return Results.Problem($"El Banco Central respondió HTTP {(int)respuesta.StatusCode}.", statusCode: 502);
+        texto = BancoCentral.Decodificar(await respuesta.Content.ReadAsByteArrayAsync(ct));
     }
-    catch (ArgumentException ex)
+    catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
     {
-        return Results.BadRequest(new { error = ex.Message });
+        return Results.Problem($"No respondió el Banco Central: {ex.GetBaseException().Message}", statusCode: 502);
     }
+    if (BancoCentral.LeerUltimo(texto, out var error) is not { } dato)
+        return Results.Problem(error, statusCode: 502);
+    return RegistrarVariable(codigo, dato.Valor, "API_BCCH", dato.Fecha, parametros, auditoria);
 });
 
 robots.MapGet("/variables", (IRepositorioParametros parametros) => parametros.Ultimos().Values);
@@ -143,6 +153,33 @@ robots.MapGet("/evaluaciones/{id:long}/aprobaciones", (long id, ServicioAprobaci
 app.MapGet("/health/live", () => Results.Ok(new { estado = "ok", servicio = "Enami.Api", hora = DateTime.Now })).AllowAnonymous();
 
 app.Run();
+
+// Registro común de BOT-01: respeta los valores fijados por un usuario y la validación de rango.
+static IResult RegistrarVariable(string codigo, double valor, string? fuente, DateTime? fechaValor,
+    IRepositorioParametros parametros, ServicioAuditoria auditoria)
+{
+    try
+    {
+        // un valor que fijó una persona en «Dólar y minerales» (a mano o eligiendo una fecha) no lo reemplaza el robot
+        var vigentes = parametros.Ultimos();
+        if (vigentes.TryGetValue(codigo, out var actual) && actual.Fijado)
+            return Results.Conflict(new { error = $"«{codigo}» está fijado por un usuario en «Dólar y minerales»; no se reemplaza.", vigente = actual });
+        // validación de rango: un valor muy distinto del vigente (error de unidad o de la fuente) no se guarda; el robot prueba su respaldo
+        if (ValidacionMercado.Revisar(codigo, valor, vigentes.TryGetValue(codigo, out var previo) ? previo.Valor : null) is string motivo)
+        {
+            auditoria.Registrar("VARIABLE_RECHAZADA", null, robot: "BOT-01", detalle: motivo);
+            return Results.UnprocessableEntity(new { error = motivo });
+        }
+        // fechaValor: día al que corresponde el valor según la fuente (el Banco Central no publica los metales todos los días)
+        parametros.Registrar(codigo, valor, string.IsNullOrWhiteSpace(fuente) ? "BOT-01" : fuente, fechaValor);
+        auditoria.Registrar("VARIABLE_REGISTRADA", null, robot: "BOT-01", detalle: $"{codigo} = {valor} ({RepositorioParametros.NormalizarFuente(fuente ?? "BOT-01")})");
+        return Results.Ok(parametros.Ultimos()[codigo]);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+}
 
 /// <summary>Datos para calcular: el instrumento (por clave o por nombre) y los valores de las variables.</summary>
 public record SolicitudCalculo(byte? IdInstrumento, string? Instrumento, Dictionary<string, double>? Valores);

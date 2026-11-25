@@ -15,14 +15,6 @@
         "type": "SecureString",
         "defaultValue": ""
       },
-      "bcchUsuario": {
-        "type": "SecureString",
-        "defaultValue": ""
-      },
-      "bcchClave": {
-        "type": "SecureString",
-        "defaultValue": ""
-      },
       "correoAlertas": {
         "type": "String",
         "defaultValue": ""
@@ -59,88 +51,13 @@
         },
         "runAfter": {}
       },
-      "Dolar_consultar_bcch": {
-        "type": "Http",
-        "runtimeConfiguration": {
-          "secureData": {
-            "properties": [
-              "inputs"
-            ]
-          }
-        },
-        "inputs": {
-          "method": "GET",
-          "uri": "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx",
-          "queries": {
-            "user": "@parameters('bcchUsuario')",
-            "pass": "@parameters('bcchClave')",
-            "function": "GetSeries",
-            "timeseries": "F073.TCO.PRE.Z.D",
-            "firstdate": "@{formatDateTime(addDays(utcNow(), -15), 'yyyy-MM-dd')}",
-            "lastdate": "@{formatDateTime(utcNow(), 'yyyy-MM-dd')}"
-          }
-        },
-        "runAfter": {
-          "Consultar_mindicador": [
-            "Succeeded",
-            "Failed",
-            "Skipped",
-            "TimedOut"
-          ]
-        }
-      },
-      "Dolar_valores_publicados": {
-        "type": "Query",
-        "inputs": {
-          "from": "@coalesce(body('Dolar_consultar_bcch')?['Series']?['Obs'], json('[]'))",
-          "where": "@equals(item()?['statusCode'], 'OK')"
-        },
-        "runAfter": {
-          "Dolar_consultar_bcch": [
-            "Succeeded"
-          ]
-        }
-      },
       "Dolar_registrar_bcch": {
         "type": "Http",
         "inputs": {
           "method": "POST",
-          "uri": "@{parameters('urlApi')}/api/variables/Dolar",
+          "uri": "@{parameters('urlApi')}/api/bancocentral/Dolar",
           "headers": {
-            "Content-Type": "application/json",
             "X-Api-Key": "@parameters('claveApi')"
-          },
-          "body": {
-            "valor": "@float(last(body('Dolar_valores_publicados'))?['value'])",
-            "fuente": "API_BCCH",
-            "fechaValor": "@{last(body('Dolar_valores_publicados'))?['indexDateString']}"
-          }
-        },
-        "runAfter": {
-          "Dolar_valores_publicados": [
-            "Succeeded"
-          ]
-        }
-      },
-      "Cobre_consultar_bcch": {
-        "type": "Http",
-        "runtimeConfiguration": {
-          "secureData": {
-            "properties": [
-              "inputs"
-            ]
-          }
-        },
-        "inputs": {
-          "method": "GET",
-          "uri": "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx",
-          "queries": {
-            "user": "@parameters('bcchUsuario')",
-            "pass": "@parameters('bcchClave')",
-            "function": "GetSeries",
-            "timeseries": "F019.PPB.PRE.100.D",
-            "firstdate": "@{formatDateTime(addDays(utcNow(), -15), 'yyyy-MM-dd')}",
-            "lastdate": "@{formatDateTime(utcNow(), 'yyyy-MM-dd')}"
           }
         },
         "runAfter": {
@@ -149,18 +66,6 @@
             "Failed",
             "Skipped",
             "TimedOut"
-          ]
-        }
-      },
-      "Cobre_valores_publicados": {
-        "type": "Query",
-        "inputs": {
-          "from": "@coalesce(body('Cobre_consultar_bcch')?['Series']?['Obs'], json('[]'))",
-          "where": "@equals(item()?['statusCode'], 'OK')"
-        },
-        "runAfter": {
-          "Cobre_consultar_bcch": [
-            "Succeeded"
           ]
         }
       },
@@ -168,42 +73,9 @@
         "type": "Http",
         "inputs": {
           "method": "POST",
-          "uri": "@{parameters('urlApi')}/api/variables/PrecioCuLb",
+          "uri": "@{parameters('urlApi')}/api/bancocentral/PrecioCuLb",
           "headers": {
-            "Content-Type": "application/json",
             "X-Api-Key": "@parameters('claveApi')"
-          },
-          "body": {
-            "valor": "@float(last(body('Cobre_valores_publicados'))?['value'])",
-            "fuente": "API_BCCH",
-            "fechaValor": "@{last(body('Cobre_valores_publicados'))?['indexDateString']}"
-          }
-        },
-        "runAfter": {
-          "Cobre_valores_publicados": [
-            "Succeeded"
-          ]
-        }
-      },
-      "Oro_consultar_bcch": {
-        "type": "Http",
-        "runtimeConfiguration": {
-          "secureData": {
-            "properties": [
-              "inputs"
-            ]
-          }
-        },
-        "inputs": {
-          "method": "GET",
-          "uri": "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx",
-          "queries": {
-            "user": "@parameters('bcchUsuario')",
-            "pass": "@parameters('bcchClave')",
-            "function": "GetSeries",
-            "timeseries": "F019.PPB.PRE.44.D",
-            "firstdate": "@{formatDateTime(addDays(utcNow(), -15), 'yyyy-MM-dd')}",
-            "lastdate": "@{formatDateTime(utcNow(), 'yyyy-MM-dd')}"
           }
         },
         "runAfter": {
@@ -212,18 +84,6 @@
             "Failed",
             "Skipped",
             "TimedOut"
-          ]
-        }
-      },
-      "Oro_valores_publicados": {
-        "type": "Query",
-        "inputs": {
-          "from": "@coalesce(body('Oro_consultar_bcch')?['Series']?['Obs'], json('[]'))",
-          "where": "@equals(item()?['statusCode'], 'OK')"
-        },
-        "runAfter": {
-          "Oro_consultar_bcch": [
-            "Succeeded"
           ]
         }
       },
@@ -231,42 +91,9 @@
         "type": "Http",
         "inputs": {
           "method": "POST",
-          "uri": "@{parameters('urlApi')}/api/variables/PrecioAu",
+          "uri": "@{parameters('urlApi')}/api/bancocentral/PrecioAu",
           "headers": {
-            "Content-Type": "application/json",
             "X-Api-Key": "@parameters('claveApi')"
-          },
-          "body": {
-            "valor": "@float(last(body('Oro_valores_publicados'))?['value'])",
-            "fuente": "API_BCCH",
-            "fechaValor": "@{last(body('Oro_valores_publicados'))?['indexDateString']}"
-          }
-        },
-        "runAfter": {
-          "Oro_valores_publicados": [
-            "Succeeded"
-          ]
-        }
-      },
-      "Plata_consultar_bcch": {
-        "type": "Http",
-        "runtimeConfiguration": {
-          "secureData": {
-            "properties": [
-              "inputs"
-            ]
-          }
-        },
-        "inputs": {
-          "method": "GET",
-          "uri": "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx",
-          "queries": {
-            "user": "@parameters('bcchUsuario')",
-            "pass": "@parameters('bcchClave')",
-            "function": "GetSeries",
-            "timeseries": "F019.PPB.PRE.45.D",
-            "firstdate": "@{formatDateTime(addDays(utcNow(), -15), 'yyyy-MM-dd')}",
-            "lastdate": "@{formatDateTime(utcNow(), 'yyyy-MM-dd')}"
           }
         },
         "runAfter": {
@@ -278,36 +105,21 @@
           ]
         }
       },
-      "Plata_valores_publicados": {
-        "type": "Query",
-        "inputs": {
-          "from": "@coalesce(body('Plata_consultar_bcch')?['Series']?['Obs'], json('[]'))",
-          "where": "@equals(item()?['statusCode'], 'OK')"
-        },
-        "runAfter": {
-          "Plata_consultar_bcch": [
-            "Succeeded"
-          ]
-        }
-      },
       "Plata_registrar_bcch": {
         "type": "Http",
         "inputs": {
           "method": "POST",
-          "uri": "@{parameters('urlApi')}/api/variables/PrecioAg",
+          "uri": "@{parameters('urlApi')}/api/bancocentral/PrecioAg",
           "headers": {
-            "Content-Type": "application/json",
             "X-Api-Key": "@parameters('claveApi')"
-          },
-          "body": {
-            "valor": "@float(last(body('Plata_valores_publicados'))?['value'])",
-            "fuente": "API_BCCH",
-            "fechaValor": "@{last(body('Plata_valores_publicados'))?['indexDateString']}"
           }
         },
         "runAfter": {
-          "Plata_valores_publicados": [
-            "Succeeded"
+          "Consultar_mindicador": [
+            "Succeeded",
+            "Failed",
+            "Skipped",
+            "TimedOut"
           ]
         }
       },
