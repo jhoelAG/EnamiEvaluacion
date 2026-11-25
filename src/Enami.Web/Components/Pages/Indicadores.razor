@@ -41,21 +41,21 @@
 {
     <div class="row g-3 mb-4">
         <Tarjeta Codigo="TPE" Nombre="Tiempo promedio de tramitación"
-                 Valor="@(r.Tpe is double t ? $"{t:N1} h" : "—")"
+                 Valor="@(r.Tpe is double t ? Cl($"{t:N1} h") : "—")"
                  Meta="−33 % respecto de la línea base (se mide en la operación en paralelo, F3)"
-                 Base="@($"{r.DetalleTpe.Count} evaluaciones con dictamen")" />
+                 Base="@Cl($"{r.DetalleTpe.Count} evaluaciones con dictamen")" />
         <Tarjeta Codigo="TEP" Nombre="Tasa de error de parámetros de mercado"
                  Valor="@Pct(r.Tep)" Meta="0 %"
                  Estado="@(r.Tep is double p ? (bool?)(p <= ServicioIndicadores.MetaTep) : null)"
-                 Base="@($"{r.DetalleTep.Count} evaluaciones calculadas")" />
+                 Base="@Cl($"{r.DetalleTep.Count} evaluaciones calculadas")" />
         <Tarjeta Codigo="ITR" Nombre="Índice de trazabilidad"
                  Valor="@Pct(r.Itr)" Meta="100 %"
                  Estado="@(r.Itr is double i ? (bool?)(i >= ServicioIndicadores.MetaItr) : null)"
-                 Base="@($"{r.DetalleItr.Count} evaluaciones con dictamen")" />
+                 Base="@Cl($"{r.DetalleItr.Count} evaluaciones con dictamen")" />
         <Tarjeta Codigo="IAM" Nombre="Actualización automática de mercado"
                  Valor="@Pct(r.Iam)" Meta="≥ 95 % de los días hábiles antes de las 09:30"
                  Estado="@(r.Iam is double m ? (bool?)(m >= ServicioIndicadores.MetaIam) : null)"
-                 Base="@($"{r.DetalleIam.Count} días hábiles")" />
+                 Base="@Cl($"{r.DetalleIam.Count} días hábiles")" />
     </div>
 
     <details class="mb-3" open="@(r.DetalleTpe.Count > 0)">
@@ -69,7 +69,7 @@
                     @foreach (var f in r.DetalleTpe)
                     {
                         <tr><td><a href="evaluaciones/@f.Id">@f.Nro</a></td><td>@Estado(f.Estado)</td><td>@f.Ingreso.ToString("dd-MM-yyyy HH:mm")</td>
-                            <td>@f.Dictamen.ToString("dd-MM-yyyy HH:mm")</td><td class="text-end">@f.HorasHabiles.ToString("N1")</td></tr>
+                            <td>@f.Dictamen.ToString("dd-MM-yyyy HH:mm")</td><td class="text-end">@f.HorasHabiles.ToString("N1", Formato.Chile)</td></tr>
                     }
                 </tbody>
             </table>
@@ -122,7 +122,7 @@
                 <tbody>
                     @foreach (var f in r.DetalleIam)
                     {
-                        <tr><td>@f.Dia.ToString("ddd dd-MM-yyyy")</td><td>@Hora(f.Dolar)</td><td>@Hora(f.Cobre)</td>
+                        <tr><td>@f.Dia.ToString("ddd dd-MM-yyyy", Formato.Chile)</td><td>@Hora(f.Dolar)</td><td>@Hora(f.Cobre)</td>
                             <td>@(f.Cumple ? "Sí" : "No")</td></tr>
                     }
                 </tbody>
@@ -153,9 +153,9 @@
                     <tbody>
                         @foreach (var f in g.PorMesYOficina)
                         {
-                            <tr><td>@f.Mes.ToString("MMM yyyy")</td><td>@f.Oficina</td><td class="text-end">@f.Ingresadas</td>
+                            <tr><td>@f.Mes.ToString("MMM yyyy", Formato.Chile)</td><td>@f.Oficina</td><td class="text-end">@f.Ingresadas</td>
                                 <td class="text-end text-success">@f.Aprobadas</td><td class="text-end text-danger">@f.Rechazadas</td>
-                                <td class="text-end">@(f.TasaAprobacion is double t ? $"{t:N1} %" : "—")</td></tr>
+                                <td class="text-end">@(f.TasaAprobacion is double t ? Cl($"{t:N1} %") : "—")</td></tr>
                         }
                     </tbody>
                 </table>
@@ -171,7 +171,7 @@
                 foreach (var f in g.PorNivel)
                 {
                     <Barra Etiqueta="@f.Nivel" Ancho="@(max == 0 ? 0 : f.HorasPromedio / max * 100)"
-                           Texto="@($"{f.HorasPromedio:N1} h hábiles promedio · {f.Decisiones} decisiones")" />
+                           Texto="@Cl($"{f.HorasPromedio:N1} h hábiles promedio · {f.Decisiones} decisiones")" />
                 }
             }
         </div>
@@ -183,12 +183,12 @@
             {
                 foreach (var f in g.MontoPorInstrumento)
                 {
-                    <Barra Etiqueta="@f.Grupo" Ancho="@f.Porcentaje" Texto="@($"US$ {f.Monto:N0} · {f.Porcentaje:N1} % · {f.Evaluaciones} eval.")" />
+                    <Barra Etiqueta="@f.Grupo" Ancho="@f.Porcentaje" Texto="@Cl($"US$ {f.Monto:N0} · {f.Porcentaje:N1} % · {f.Evaluaciones} eval.")" />
                 }
                 <h3 class="h6 mt-3">Monto aprobado por tipo de productor</h3>
                 foreach (var f in g.MontoPorTipoProductor)
                 {
-                    <Barra Etiqueta="@f.Grupo" Ancho="@f.Porcentaje" Texto="@($"US$ {f.Monto:N0} · {f.Porcentaje:N1} %")" />
+                    <Barra Etiqueta="@f.Grupo" Ancho="@f.Porcentaje" Texto="@Cl($"US$ {f.Monto:N0} · {f.Porcentaje:N1} %")" />
                 }
             }
         </div>
@@ -200,7 +200,7 @@
             {
                 foreach (var f in g.Causales)
                 {
-                    <Barra Etiqueta="@($"{f.Codigo} · {f.Descripcion}")" Ancho="@f.Porcentaje" Color="danger"
+                    <Barra Etiqueta="@Cl($"{f.Codigo} · {f.Descripcion}")" Ancho="@f.Porcentaje" Color="danger"
                            Texto="@TextoCausal(f)" />
                 }
             }
@@ -236,8 +236,9 @@
         _g = Gestion.Calcular(_desde, _hasta, oficina);
     }
 
-    private static string TextoCausal(FilaCausal f) => $"{f.Veces} " + (f.Veces == 1 ? "rechazo" : "rechazos") + $" · {f.Porcentaje:N1} %";
-    private static string Pct(double? v) => v is double x ? $"{x:N1} %" : "—";
+    private static string TextoCausal(FilaCausal f) => $"{f.Veces} " + (f.Veces == 1 ? "rechazo" : "rechazos") + Cl($" · {f.Porcentaje:N1} %");
+    private static string Cl(FormattableString texto) => texto.ToString(Formato.Chile);
+    private static string Pct(double? v) => v is double x ? Cl($"{x:N1} %") : "—";
     private static string Hora(DateTime? d) => d?.ToString("HH:mm") ?? "—";
     private static string Estado(string e) => e == EstadosSolicitud.Aprobada ? "Aprobada" : e == EstadosSolicitud.Rechazada ? "Rechazada" : e;
 }
