@@ -32,7 +32,8 @@ public record ResultadoIndicadores(
 /// TPE, tiempo promedio de tramitación en horas hábiles entre el ingreso y el dictamen;
 /// TEP, % de evaluaciones calculadas con un dólar o un cobre de más de un día hábil de antigüedad;
 /// ITR, % de evaluaciones con dictamen y registro completo (decisiones, causal y auditoría);
-/// IAM, % de días hábiles en que el dólar y el cobre se actualizaron solos (BOT-01 o la consulta automática) antes de las 09:30.
+/// IAM, % de días hábiles en que el dólar y el cobre se actualizaron solos (BOT-01 o la consulta automática) antes de las 09:30,
+/// contados desde el primer registro automático (la entrada en operación de la automatización).
 /// </summary>
 public class ServicioIndicadores(IAlmacen db)
 {
@@ -74,9 +75,12 @@ public class ServicioIndicadores(IAlmacen db)
         var parametros = db.Tabla<ParametroEconomico>().Where(p => codigos.Contains(p.CodigoVariable)).ToList();
         var tep = calculos.Select(r => new FilaTep(r.IdSolicitud, ids[r.IdSolicitud], r.FechaCalculo, Desactualizado(r.FechaCalculo, parametros))).ToList();
 
-        // IAM: días hábiles del período ya transcurridos (hoy cuenta desde las 09:30)
+        // IAM: días hábiles del período ya transcurridos (hoy cuenta desde las 09:30), contados desde que la actualización
+        // automática entró en operación (su primer registro): antes de esa fecha no hay nada que medir
+        var automaticos = parametros.Where(p => p.IdUsuario is null && p.Fuente != "MANUAL").ToList();
+        var inicioIam = automaticos.Count == 0 ? (DateTime?)null : automaticos.Min(p => p.Fecha).Date;
         var iam = new List<FilaIam>();
-        for (var dia = desde; dia <= hasta; dia = dia.AddDays(1))
+        for (var dia = inicioIam is DateTime i && i > desde ? i : desde; inicioIam is not null && dia <= hasta; dia = dia.AddDays(1))
         {
             if (!EsHabil(dia) || dia > momento.Date || (dia == momento.Date && momento.TimeOfDay < LimiteMercado)) continue;
             DateTime? Primero(string codigo) => parametros

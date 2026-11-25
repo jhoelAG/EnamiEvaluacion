@@ -83,6 +83,11 @@ public class IndicadoresTests
         var r = new ServicioIndicadores(e.Db).Calcular(Lunes, Lunes.AddDays(6), ahora: Lunes.AddDays(3).AddHours(8));
         Assert.Equal(new[] { true, false, false }, r.DetalleIam.Select(f => f.Cumple));
         Assert.Equal(33.3, r.Iam);
+
+        // antes del primer registro automático no se cuentan días: el período anterior no tiene días que medir
+        var antes = new ServicioIndicadores(e.Db).Calcular(Lunes.AddDays(-14), Lunes.AddDays(-1), ahora: Lunes.AddDays(3));
+        Assert.Empty(antes.DetalleIam);
+        Assert.Null(antes.Iam);
     }
 
     [Fact]
@@ -92,6 +97,6 @@ public class IndicadoresTests
         Assert.Null(r.Tpe);
         Assert.Null(r.Tep);
         Assert.Null(r.Itr);
-        Assert.Equal(0, r.Iam);
+        Assert.Null(r.Iam);   // sin registros automáticos todavía no hay días que medir
     }
 }
