@@ -37,6 +37,9 @@
             <option value="@EstadosSolicitud.Rechazada">Rechazada</option>
         </select>
     </div>
+    <div class="col-md-auto">
+        <a class="btn btn-outline-secondary btn-sm" href="@UrlExportar" download>Exportar a Excel</a>
+    </div>
 </div>
 
 @if (_lista.Count == 0)
@@ -103,6 +106,9 @@ else
     }
 
     private bool _soloPendientes;
+
+    /// <summary>Descarga en Excel las evaluaciones con el filtro de estado y la búsqueda actuales (RF-29).</summary>
+    private string UrlExportar => $"exportar/evaluaciones?estado={Uri.EscapeDataString(_estado)}&texto={Uri.EscapeDataString(_texto)}";
 
     private void CambiarEstado()
     {

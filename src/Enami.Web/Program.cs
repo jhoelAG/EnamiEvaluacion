@@ -83,6 +83,15 @@ app.MapMethods("/cuenta/salir", ["GET", "POST"], async (HttpContext http, string
     return Results.Redirect(motivo == "inactividad" ? "/cuenta/ingresar?expirada=1" : "/cuenta/ingresar");
 }).AllowAnonymous().DisableAntiforgery();
 
+// Exportación del historial de evaluaciones a Excel (RF-29): lo mismo que el usuario ve en la bandeja
+app.MapGet("/exportar/evaluaciones", (HttpContext http, ServicioExportacion exportacion, string? estado, string? texto) =>
+{
+    var usuario = http.User.Usuario();
+    if (usuario is null) return Results.Unauthorized();
+    var archivo = exportacion.Evaluaciones(usuario, string.IsNullOrWhiteSpace(estado) ? null : estado, texto);
+    return Results.File(archivo, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"evaluaciones-{DateTime.Now:yyyy-MM-dd-HHmm}.xlsx");
+}).RequireAuthorization();
+
 app.Run();
 
 public partial class Program;
