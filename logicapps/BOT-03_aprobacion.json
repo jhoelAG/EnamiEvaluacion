@@ -1,0 +1,241 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "type": "Object",
+        "defaultValue": {}
+      },
+      "claveApi": {
+        "type": "SecureString",
+        "defaultValue": ""
+      },
+      "correoPruebas": {
+        "type": "String",
+        "defaultValue": ""
+      }
+    },
+    "triggers": {
+      "Aviso_de_la_aplicacion": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "tipo": {
+                "type": "string"
+              },
+              "idEvaluacion": {
+                "type": "integer"
+              },
+              "nroEvaluacion": {
+                "type": "string"
+              },
+              "nivel": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "nivelNombre": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "aprobador": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "nombre": {
+                    "type": "string"
+                  },
+                  "correo": {
+                    "type": "string"
+                  }
+                }
+              },
+              "ingeniero": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string"
+                  },
+                  "correo": {
+                    "type": "string"
+                  }
+                }
+              },
+              "productor": {
+                "type": "string"
+              },
+              "faena": {
+                "type": "string"
+              },
+              "oficina": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "instrumento": {
+                "type": "string"
+              },
+              "montoSolicitado": {
+                "type": "number"
+              },
+              "van": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "estado": {
+                "type": "string"
+              },
+              "comentario": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "urlEvaluacion": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "urlDecision": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "tipo",
+              "idEvaluacion",
+              "nroEvaluacion",
+              "ingeniero"
+            ]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Segun_el_tipo_de_aviso": {
+        "type": "Switch",
+        "expression": "@triggerBody()?['tipo']",
+        "cases": {
+          "Aprobacion_pendiente": {
+            "case": "APROBACION_PENDIENTE",
+            "actions": {
+              "Enviar_correo_de_aprobacion": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['outlook']['connectionId']"
+                    }
+                  },
+                  "path": "/approvalmail/$subscriptions",
+                  "body": {
+                    "NotificationUrl": "@{listCallbackUrl()}",
+                    "Message": {
+                      "To": "@{if(empty(parameters('correoPruebas')), triggerBody()?['aprobador']?['correo'], parameters('correoPruebas'))}",
+                      "Subject": "Aprobación pendiente: @{triggerBody()?['nroEvaluacion']} (@{triggerBody()?['nivelNombre']})",
+                      "Options": "Aprobar, Observar",
+                      "Body": "@{if(empty(parameters('correoPruebas')), '', concat('[Piloto] Este correo era para ', triggerBody()?['aprobador']?['nombre'], ' <', triggerBody()?['aprobador']?['correo'], '>.'))}\n\nLa evaluación @{triggerBody()?['nroEvaluacion']} espera su decisión como @{triggerBody()?['nivelNombre']}.\n\nProductor: @{triggerBody()?['productor']}\nFaena: @{triggerBody()?['faena']}\nOficina: @{triggerBody()?['oficina']}\nInstrumento: @{triggerBody()?['instrumento']}\nMonto solicitado: US$ @{formatNumber(triggerBody()?['montoSolicitado'], 'N0', 'es-CL')}\nVAN: $ @{if(equals(triggerBody()?['van'], null), 'sin cálculo', formatNumber(triggerBody()?['van'], 'N0', 'es-CL'))}\nComentario del nivel anterior: @{coalesce(triggerBody()?['comentario'], '—')}\n\nVer la evaluación: @{triggerBody()?['urlEvaluacion']}\n\nElija Aprobar u Observar. Para rechazar, ingrese a la aplicación: el rechazo exige elegir la causal.",
+                      "Importance": "Normal",
+                      "HideHTMLMessage": false,
+                      "ShowHTMLConfirmationDialog": false
+                    }
+                  }
+                },
+                "runAfter": {}
+              },
+              "Registrar_decision_en_la_API": {
+                "type": "Http",
+                "inputs": {
+                  "method": "POST",
+                  "uri": "@{triggerBody()?['urlDecision']}",
+                  "headers": {
+                    "Content-Type": "application/json",
+                    "X-Api-Key": "@parameters('claveApi')"
+                  },
+                  "body": {
+                    "correo": "@{triggerBody()?['aprobador']?['correo']}",
+                    "decision": "@{body('Enviar_correo_de_aprobacion')?['SelectedOption']}",
+                    "comentario": "@{if(equals(body('Enviar_correo_de_aprobacion')?['SelectedOption'], 'Observar'), 'Observada desde el correo de aprobación: el aprobador indicará qué corregir.', 'Aprobada desde el correo de aprobación.')}"
+                  }
+                },
+                "runAfter": {
+                  "Enviar_correo_de_aprobacion": [
+                    "Succeeded"
+                  ]
+                }
+              }
+            }
+          },
+          "Observada": {
+            "case": "OBSERVADA",
+            "actions": {
+              "Avisar_al_ingeniero_la_observacion": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['outlook']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/v2/Mail",
+                  "body": {
+                    "To": "@{if(empty(parameters('correoPruebas')), triggerBody()?['ingeniero']?['correo'], parameters('correoPruebas'))}",
+                    "Subject": "Evaluación observada: @{triggerBody()?['nroEvaluacion']}",
+                    "Body": "@{if(empty(parameters('correoPruebas')), '', concat('[Piloto] Este correo era para ', triggerBody()?['ingeniero']?['nombre'], ' <', triggerBody()?['ingeniero']?['correo'], '>.'))}\n\nLa evaluación @{triggerBody()?['nroEvaluacion']} fue observada y volvió a usted para corregirla.\n\nComentario: @{coalesce(triggerBody()?['comentario'], '—')}\n\nProductor: @{triggerBody()?['productor']}\nFaena: @{triggerBody()?['faena']}\nOficina: @{triggerBody()?['oficina']}\nInstrumento: @{triggerBody()?['instrumento']}\nMonto solicitado: US$ @{formatNumber(triggerBody()?['montoSolicitado'], 'N0', 'es-CL')}\nVAN: $ @{if(equals(triggerBody()?['van'], null), 'sin cálculo', formatNumber(triggerBody()?['van'], 'N0', 'es-CL'))}\nCorregir la evaluación: @{triggerBody()?['urlEvaluacion']}",
+                    "Importance": "Normal"
+                  }
+                }
+              }
+            }
+          },
+          "Dictamen": {
+            "case": "DICTAMEN",
+            "actions": {
+              "Avisar_al_ingeniero_el_dictamen": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['outlook']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/v2/Mail",
+                  "body": {
+                    "To": "@{if(empty(parameters('correoPruebas')), triggerBody()?['ingeniero']?['correo'], parameters('correoPruebas'))}",
+                    "Subject": "Dictamen: @{triggerBody()?['nroEvaluacion']} @{toLower(triggerBody()?['estado'])}",
+                    "Body": "@{if(empty(parameters('correoPruebas')), '', concat('[Piloto] Este correo era para ', triggerBody()?['ingeniero']?['nombre'], ' <', triggerBody()?['ingeniero']?['correo'], '>.'))}\n\nLa evaluación @{triggerBody()?['nroEvaluacion']} terminó con estado @{triggerBody()?['estado']}.\n\nComentario: @{coalesce(triggerBody()?['comentario'], '—')}\n\nProductor: @{triggerBody()?['productor']}\nFaena: @{triggerBody()?['faena']}\nOficina: @{triggerBody()?['oficina']}\nInstrumento: @{triggerBody()?['instrumento']}\nMonto solicitado: US$ @{formatNumber(triggerBody()?['montoSolicitado'], 'N0', 'es-CL')}\nVAN: $ @{if(equals(triggerBody()?['van'], null), 'sin cálculo', formatNumber(triggerBody()?['van'], 'N0', 'es-CL'))}\nVer la evaluación: @{triggerBody()?['urlEvaluacion']}",
+                    "Importance": "Normal"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "default": {
+          "actions": {}
+        },
+        "runAfter": {}
+      }
+    },
+    "outputs": {}
+  },
+  "parameters": {}
+}

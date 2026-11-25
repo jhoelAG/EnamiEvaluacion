@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 using Enami.Dominio.Servicios;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -36,7 +38,10 @@ public class NotificadorFlujosHttp(HttpClient http, IOptions<OpcionesFlujos> opc
         {
             using var espera = CancellationTokenSource.CreateLinkedTokenSource(ct);
             espera.CancelAfter(TimeSpan.FromSeconds(20));
-            using var r = await http.PostAsJsonAsync(o.UrlAprobacion, e, espera.Token);
+            // Se envía el JSON completo con su largo (Content-Length): el desencadenador HTTP de Logic Apps
+            // recibe vacío un cuerpo enviado en trozos (Transfer-Encoding: chunked), como el de PostAsJsonAsync.
+            using var contenido = new StringContent(JsonSerializer.Serialize(e, JsonSerializerOptions.Web), Encoding.UTF8, "application/json");
+            using var r = await http.PostAsync(o.UrlAprobacion, contenido, espera.Token);
             if (r.IsSuccessStatusCode) return null;
             log.LogWarning("Flujo de aprobación: respondió {Codigo} al aviso {Tipo} de la evaluación {Id}.", (int)r.StatusCode, e.Tipo, e.IdEvaluacion);
             return $"El flujo de aprobación respondió {(int)r.StatusCode}; el aprobador igual la ve en su bandeja de la aplicación.";
