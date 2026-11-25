@@ -139,7 +139,7 @@ public class MotorEvaluacionTests
         Assert.Contains("* 1,1", nueva.Formulas.Single(f => f.Codigo == "CostoFlete").Expresion);
         Assert.Equal("Jefatura de Fomento (demo)", nueva.AprobadaPor);
         // la versión retirada conserva sus fórmulas originales (historial)
-        Assert.False(repo.Obtener(vigente.Id)!.Formulas.Single(f => f.Codigo == "CostoFlete").Expresion.Contains("1,1"));
+        Assert.DoesNotContain("1,1", repo.Obtener(vigente.Id)!.Formulas.Single(f => f.Codigo == "CostoFlete").Expresion);
     }
 
     [Fact]
