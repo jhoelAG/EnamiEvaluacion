@@ -99,7 +99,7 @@ robots.MapPost("/evaluaciones/{id:long}/decision", async (long id, DecisionFlujo
         // con clave de firma, la decisión debe traer el código firmado de la aprobación pendiente y venir del aprobador asignado
         var pendiente = aprobaciones.Pendiente(id);
         if (!string.IsNullOrWhiteSpace(flujos.ClaveFirma) && pendiente is not null
-            && (!string.Equals(pendiente.Correo, d.Correo?.Trim(), StringComparison.OrdinalIgnoreCase)
+            && (!string.Equals(pendiente.Correo, d.Correo.Trim(), StringComparison.OrdinalIgnoreCase)
                 || !FirmaDecision.Verificar(flujos.ClaveFirma, pendiente.Id, id, pendiente.Correo, d.Token)))
         {
             auditoria.Registrar("DECISION_NO_AUTORIZADA", null, id, $"Decisión por correo rechazada: código inválido o aprobador distinto ({d.Correo})", robot: "BOT-03");
