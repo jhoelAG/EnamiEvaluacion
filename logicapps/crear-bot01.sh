@@ -9,6 +9,7 @@
 #   bash logicapps/crear-bot01.sh flujo <correoAlertas>   -> crea o actualiza el flujo
 #   bash logicapps/crear-bot01.sh ejecutar                -> lo ejecuta ahora y muestra el resultado de cada paso
 #   bash logicapps/crear-bot01.sh probar-alerta           -> ejecuta una vez simulando una falla, para probar el aviso
+#   bash logicapps/crear-bot01.sh resultado               -> muestra el estado de la última ejecución, sin lanzar otra
 #   bash logicapps/crear-bot01.sh diagnostico             -> muestra qué respondió el Banco Central en la última ejecución
 # La clave de la API se lee desde Azure: este archivo no guarda secretos.
 set -euo pipefail
@@ -55,6 +56,10 @@ correo_actual() { az rest --method get --url "$FLUJO?$V" --query "properties.par
 ejecutar() {
   az rest --method post --url "$FLUJO/triggers/Todos_los_dias_a_las_9/run?$V" -o none
   echo "Ejecutando BOT-01..."; sleep 40
+  resultado
+}
+
+resultado() {   # estado de la última ejecución, sin lanzar otra
   RUN=$(az rest --method get --url "$FLUJO/runs?$V" --query "value[0].name" -o tsv)
   echo "Resultado general: $(az rest --method get --url "$FLUJO/runs/$RUN?$V" --query properties.status -o tsv)"
   az rest --method get --url "$FLUJO/runs/$RUN/actions?$V" --query "sort_by(value, &name)[].{paso:name, estado:properties.status}" -o table
@@ -76,6 +81,7 @@ case "${1:-}" in
     publicar "$2" false
     echo "BOT-01 actualizado (alertas a $2). Se ejecuta todos los días a las 09:00 (hora de Chile)." ;;
   ejecutar) ejecutar ;;
+  resultado) resultado ;;
   probar-alerta)
     CORREO=$(correo_actual)
     publicar "$CORREO" true
@@ -94,5 +100,5 @@ case "${1:-}" in
         curl -s "$LINK" | python3 -c "import json,sys; d=json.load(sys.stdin); print('HTTP', d.get('statusCode')); print(json.dumps(d.get('body'), ensure_ascii=False)[:600])"
       fi
     done ;;
-  *) echo "Uso: bash logicapps/crear-bot01.sh credenciales | flujo <correoAlertas> | ejecutar | probar-alerta | diagnostico"; exit 1 ;;
+  *) echo "Uso: bash logicapps/crear-bot01.sh credenciales | flujo <correoAlertas> | ejecutar | probar-alerta | resultado | diagnostico"; exit 1 ;;
 esac
