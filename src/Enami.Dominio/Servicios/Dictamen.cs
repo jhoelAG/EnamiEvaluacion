@@ -46,8 +46,7 @@ public class ServicioDictamen(IAlmacen db, ServicioSolicitudes solicitudes, Serv
         var momento = ahora ?? DateTime.Now;
         var s = d.Solicitud;
         var plantilla = plantillas.Obtener(g.IdPlantilla);
-        var resultado = plantilla is null ? null : MotorEvaluacion.Evaluar(plantilla, g.Valores.ToDictionary(v => v.Key, v => (double)v.Value, StringComparer.OrdinalIgnoreCase));
-        if (resultado is { Exitoso: false }) resultado = null;
+        var resultado = solicitudes.Reproducir(g);   // el mismo criterio de viabilidad que aplica la aprobación
         double van = resultado?.Van ?? (double)g.Van;
         bool viable = resultado?.Viable ?? van >= 0;
         var historial = aprobaciones.Historial(s.Id);
@@ -169,7 +168,14 @@ public class ServicioDictamen(IAlmacen db, ServicioSolicitudes solicitudes, Serv
                     a.FechaDecision?.ToString("dd-MM-yyyy HH:mm") ?? "—", string.IsNullOrWhiteSpace(a.Comentario) ? "—" : a.Comentario
                 ]));
             var final = historial.LastOrDefault(a => a.FechaDecision is not null && a.Decision is EstadosSolicitud.Aprobada or EstadosSolicitud.Rechazada);
-            if (resuelta && final is not null)
+            if (resuelta && final is { Nivel: 1 })
+            {
+                pdf.Espacio(10);
+                pdf.Texto($"Cerrada como no viable por {final.Aprobador} ({final.NivelNombre}) el {final.FechaDecision:dd-MM-yyyy} a las " +
+                          $"{final.FechaDecision:HH:mm}. Las evaluaciones no viables no pasan a la visación del Jefe de Oficina ni del Subgerente: " +
+                          "se cierran con su causal de rechazo y la decisión queda en el registro de auditoría.", 8.5f, false, ColorPdf.Texto);
+            }
+            else if (resuelta && final is not null)
             {
                 pdf.Espacio(10);
                 pdf.Texto($"Resuelta electrónicamente por {final.Aprobador} ({final.NivelNombre}) el {final.FechaDecision:dd-MM-yyyy} a las " +

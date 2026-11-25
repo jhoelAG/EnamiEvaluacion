@@ -243,6 +243,25 @@ public class ServicioSolicitudes(IAlmacen db, IRepositorioPlantillas plantillas,
         return r;
     }
 
+    /// <summary>
+    /// Reproduce un cálculo guardado con sus mismos valores y la misma versión de las fórmulas (no con los valores de mercado de hoy).
+    /// Null si la versión ya no existe o el cálculo no se puede repetir.
+    /// </summary>
+    public ResultadoEvaluacion? Reproducir(ResultadoGuardado g)
+    {
+        var plantilla = plantillas.Obtener(g.IdPlantilla);
+        if (plantilla is null) return null;
+        var r = MotorEvaluacion.Evaluar(plantilla, g.Valores.ToDictionary(v => v.Key, v => (double)v.Value, StringComparer.OrdinalIgnoreCase));
+        return r.Exitoso ? r : null;
+    }
+
+    /// <summary>
+    /// Dictamen técnico del último cálculo guardado (proceso 2, pasos 2.6 y 2.7): VIABLE si el VAN no es negativo y, en el modo por
+    /// escenarios, además la recuperación cubre el financiamiento. Null si la evaluación aún no tiene un cálculo guardado.
+    /// </summary>
+    public bool? Viable(long idSolicitud) =>
+        UltimoResultado(idSolicitud) is { } g ? Reproducir(g)?.Viable ?? g.Van >= 0 : null;
+
     public ResultadoGuardado? UltimoResultado(long idSolicitud)
     {
         var r = db.Tabla<ResultadoCalculo>().Where(x => x.IdSolicitud == idSolicitud).OrderByDescending(x => x.Id).FirstOrDefault();

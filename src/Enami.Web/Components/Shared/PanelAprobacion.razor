@@ -3,7 +3,7 @@
 @inject INotificadorFlujos Notificador
 @inject ServicioCatalogos Catalogos
 
-@if (_historial.Count > 0 || _puedeEnviar || _mensaje is not null)
+@if (_historial.Count > 0 || _puedeEnviar || _puedeCerrar || _mensaje is not null)
 {
     <div class="card mb-3">
         <div class="card-body">
@@ -49,6 +49,13 @@
             {
                 <div class="border rounded p-3 bg-body-tertiary">
                     <div class="fw-semibold mb-2">Su decisión como @(_pendiente!.NivelNombre)</div>
+                    @if (_viable == false)
+                    {
+                        <div class="alert alert-warning py-2 small">
+                            El proyecto no es viable según el último cálculo guardado, por lo que no se puede aprobar: obsérvelo para que el
+                            ingeniero corrija los datos o rechácelo con su causal.
+                        </div>
+                    }
                     <label class="form-label small" for="ap-comentario">Comentario (obligatorio si observa o rechaza)</label>
                     <textarea id="ap-comentario" class="form-control form-control-sm mb-2" rows="2" maxlength="@ServicioAprobaciones.LargoComentario" @bind="_comentario"></textarea>
                     <label class="form-label small" for="ap-causal">Causal de rechazo (obligatoria si rechaza)</label>
@@ -60,7 +67,10 @@
                         }
                     </select>
                     <div class="d-flex flex-wrap gap-2">
-                        <button class="btn btn-success btn-sm" disabled="@_ocupado" @onclick="() => Decidir(ServicioAprobaciones.Aprobar)">Aprobar</button>
+                        @if (_viable != false)
+                        {
+                            <button class="btn btn-success btn-sm" disabled="@_ocupado" @onclick="() => Decidir(ServicioAprobaciones.Aprobar)">Aprobar</button>
+                        }
                         <button class="btn btn-warning btn-sm" disabled="@_ocupado" @onclick="() => Decidir(ServicioAprobaciones.Observar)">Observar</button>
                         <button class="btn btn-danger btn-sm" disabled="@_ocupado" @onclick="() => Decidir(ServicioAprobaciones.Rechazar)">Rechazar</button>
                     </div>
@@ -70,6 +80,28 @@
             else if (_pendiente is not null)
             {
                 <p class="small text-muted mb-0">Espera la decisión de @_pendiente.Aprobador (@_pendiente.NivelNombre).</p>
+            }
+
+            @if (_puedeCerrar)
+            {
+                <div class="border border-danger-subtle rounded p-3 mt-2">
+                    <div class="fw-semibold mb-1">Proyecto no viable</div>
+                    <p class="small mb-2">
+                        Según el último cálculo guardado el proyecto no es viable, así que no pasa a la revisión del Jefe de Oficina ni del
+                        Subgerente: ciérrelo indicando la causal de rechazo. Si un dato está equivocado, corríjalo, vuelva a calcular y guarde.
+                    </p>
+                    <label class="form-label small" for="nv-causal">Causal de rechazo (obligatoria)</label>
+                    <select id="nv-causal" class="form-select form-select-sm mb-2" @bind="_idCausal">
+                        <option value="">Seleccione una causal…</option>
+                        @foreach (var c in _causales)
+                        {
+                            <option value="@c.Id">@c.Codigo · @c.Descripcion</option>
+                        }
+                    </select>
+                    <label class="form-label small" for="nv-comentario">Comentario (opcional)</label>
+                    <textarea id="nv-comentario" class="form-control form-control-sm mb-2" rows="2" maxlength="@ServicioAprobaciones.LargoComentario" @bind="_comentario"></textarea>
+                    <button class="btn btn-danger btn-sm" disabled="@_ocupado" @onclick="Cerrar">Cerrar como no viable</button>
+                </div>
             }
 
             @if (_puedeEnviar)
@@ -92,7 +124,8 @@
     private IReadOnlyList<AprobacionVista> _historial = [];
     private IReadOnlyList<CausalRechazo> _causales = [];
     private AprobacionVista? _pendiente;
-    private bool _puedeEnviar, _esAprobador, _ocupado;
+    private bool _puedeEnviar, _puedeCerrar, _esAprobador, _ocupado;
+    private bool? _viable;
     private string? _comentario, _mensaje;
     private short? _idCausal;
     private string _clase = "alert-success";
@@ -103,13 +136,18 @@
         var s = Detalle.Solicitud;
         _historial = Aprobaciones.Historial(s.Id);
         _pendiente = _historial.LastOrDefault(a => a.FechaDecision is null);
-        _puedeEnviar = Aprobaciones.PuedeEnviar(s, Usuario) && Detalle.UltimoResultado is not null;
+        // proceso 3, compuerta «¿Viable?»: si el último cálculo guardado no es viable, no se envía a revisión: se cierra con la causal
+        _viable = Detalle.UltimoResultado is null ? null : Aprobaciones.Viable(s.Id);
+        _puedeEnviar = Aprobaciones.PuedeEnviar(s, Usuario) && Detalle.UltimoResultado is not null && _viable != false;
+        _puedeCerrar = Aprobaciones.PuedeEnviar(s, Usuario) && _viable == false;
         _esAprobador = s.Estado == EstadosSolicitud.EnRevision && _pendiente is not null
                        && _pendiente.Correo.Equals(Usuario.Correo, StringComparison.OrdinalIgnoreCase);
-        if (_esAprobador && _causales.Count == 0) _causales = Catalogos.Causales();
+        if ((_esAprobador || _puedeCerrar) && _causales.Count == 0) _causales = Catalogos.Causales();
     }
 
     private Task Enviar() => Ejecutar(() => Aprobaciones.Enviar(Detalle.Solicitud.Id, Usuario));
+
+    private Task Cerrar() => Ejecutar(() => Aprobaciones.CerrarNoViable(Detalle.Solicitud.Id, Usuario, _idCausal, _comentario));
 
     private Task Decidir(string decision) => Ejecutar(() =>
         Aprobaciones.Decidir(Detalle.Solicitud.Id, Usuario, decision, _comentario, decision == ServicioAprobaciones.Rechazar ? _idCausal : null));

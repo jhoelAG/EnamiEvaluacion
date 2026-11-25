@@ -69,6 +69,10 @@ public class ServicioAprobaciones(IAlmacen db, ServicioSolicitudes solicitudes, 
             throw new ErrorNegocio("Solo se envían a revisión las evaluaciones en borrador u observadas.");
         if (solicitudes.UltimoResultado(s.Id) is null)
             throw new ErrorNegocio("Antes de enviarla a revisión, complete los datos y guarde la evaluación con el cálculo del VAN.");
+        // proceso 3, compuerta «¿Viable?»: las evaluaciones no viables no requieren visación; se cierran con su causal
+        if (solicitudes.Viable(s.Id) == false)
+            throw new ErrorNegocio($"El proyecto no es viable según el último cálculo guardado (VAN {Dolares(solicitudes.UltimoResultado(s.Id)!.Van)}), " +
+                                   "así que no pasa a revisión: ciérrelo como no viable indicando la causal, o corrija los datos y vuelva a calcular.");
 
         var faena = db.Tabla<Faena>().First(f => f.Id == s.IdFaena);
         // RF-14: la elegibilidad se vuelve a revisar al enviar, porque el padrón puede vencer o el productor caer en mora después de crear el borrador
@@ -90,6 +94,51 @@ public class ServicioAprobaciones(IAlmacen db, ServicioSolicitudes solicitudes, 
         auditoria.Registrar("SOLICITUD_ENVIADA", usuario.Id, s.Id, $"Enviada a revisión; asignada a {jefe.NombreCompleto} (Jefe de Oficina)");
         return new ResultadoAprobacion(EstadosSolicitud.EnRevision, $"Evaluación enviada a revisión. La revisa {jefe.NombreCompleto} (Jefe de Oficina).",
             [Evento("APROBACION_PENDIENTE", s, 2, jefe, null)]);
+    }
+
+    /// <summary>El ingeniero puede cerrar como no viable una evaluación suya en borrador u observada cuyo último cálculo es NO VIABLE.</summary>
+    public bool PuedeCerrarNoViable(SolicitudCredito s, UsuarioSesion u) => PuedeEnviar(s, u) && solicitudes.Viable(s.Id) == false;
+
+    /// <summary>Dictamen técnico del último cálculo guardado de la evaluación (null si no tiene cálculo).</summary>
+    public bool? Viable(long idSolicitud) => solicitudes.Viable(idSolicitud);
+
+    /// <summary>
+    /// Proceso 2, pasos 2.6 y 2.7, y CU-02 flujo 6a (HU-11): si el VAN es negativo, el ingeniero selecciona la causal y la evaluación
+    /// queda rechazada sin pasar por la visación del Jefe de Oficina ni del Subgerente (compuerta «¿Viable?» del proceso 3). Queda
+    /// registrada como una decisión del nivel 1 en APROBACION y en la auditoría, con fecha de dictamen, y se avisa al flujo para
+    /// notificar el dictamen.
+    /// </summary>
+    public ResultadoAprobacion CerrarNoViable(long idSolicitud, UsuarioSesion usuario, short? idCausal, string? comentario)
+    {
+        var s = Solicitud(idSolicitud);
+        if (s.IdIngeniero != usuario.Id) throw new ErrorNegocio("Solo el ingeniero que registró la evaluación puede cerrarla.");
+        if (s.Estado is not (EstadosSolicitud.Borrador or EstadosSolicitud.Observada))
+            throw new ErrorNegocio("Solo se cierran las evaluaciones en borrador u observadas.");
+        var g = solicitudes.UltimoResultado(s.Id)
+                ?? throw new ErrorNegocio("Antes de cerrarla, complete los datos y guarde la evaluación con el cálculo del VAN.");
+        if (solicitudes.Viable(s.Id) != false)
+            throw new ErrorNegocio("El proyecto es viable según el último cálculo guardado: envíelo a revisión.");
+        if (idCausal is null) throw new ErrorNegocio("Seleccione la causal de rechazo.");
+        if (!db.Tabla<CausalRechazo>().Any(x => x.Id == idCausal)) throw new ErrorNegocio("La causal de rechazo no existe.");
+        comentario = string.IsNullOrWhiteSpace(comentario) ? null : comentario.Trim();
+        if (comentario?.Length > LargoComentario) throw new ErrorNegocio($"El comentario tiene como máximo {LargoComentario} caracteres.");
+
+        var ahora = DateTime.Now;
+        db.EnTransaccion(() =>
+        {
+            db.Agregar(new Aprobacion { IdSolicitud = s.Id, IdUsuario = usuario.Id, FechaAsignacion = ahora, FechaDecision = ahora,
+                                        Decision = Rechazar, Comentario = comentario ?? "Proyecto no viable: cerrado sin visación." });
+            s.Estado = EstadosSolicitud.Rechazada;
+            s.IdCausal = idCausal;
+            s.FechaDictamen = ahora;
+            db.Guardar();
+        });
+        var causal = db.Tabla<CausalRechazo>().Where(c => c.Id == idCausal).Select(c => c.Codigo + " · " + c.Descripcion).First();
+        auditoria.Registrar("DECISION_" + Rechazar, usuario.Id, s.Id,
+            $"{usuario.NombreCompleto} (Ingeniero de Fomento): cerrada como no viable (VAN {Dolares(g.Van)}) — causal {causal}" +
+            (comentario is null ? "" : " — " + comentario));
+        return new ResultadoAprobacion(s.Estado, $"Evaluación cerrada como no viable, con la causal {causal}.",
+            [Evento("DICTAMEN", s, 1, null, comentario ?? $"Proyecto no viable. Causal: {causal}.")]);
     }
 
     /// <summary>Decisión tomada en la aplicación por el aprobador que tiene asignada la evaluación.</summary>
@@ -151,6 +200,11 @@ public class ServicioAprobaciones(IAlmacen db, ServicioSolicitudes solicitudes, 
                 ? "Seleccione la causal de rechazo."
                 : "Para rechazar hay que elegir la causal: ingrese a la aplicación y rechace la evaluación desde ahí.");
         if (idCausal is short c && !db.Tabla<CausalRechazo>().Any(x => x.Id == c)) throw new ErrorNegocio("La causal de rechazo no existe.");
+        // un proyecto no viable no se aprueba (proceso 3, compuerta «¿Viable?»); vale también para el correo y la API
+        if (d == Aprobar && solicitudes.Viable(s.Id) == false)
+            throw new ErrorNegocio(robot is null
+                ? "No se puede aprobar: el proyecto no es viable según el último cálculo guardado. Rechácela con su causal u obsérvela para que el ingeniero corrija los datos."
+                : $"No se puede aprobar {s.NroSolicitud}: el proyecto no es viable. Ingrese a la aplicación para rechazarla con su causal u observarla.");
 
         int nivel = Nivel(db.Tabla<Rol>().Where(r => r.Id == aprobador.IdRol).Select(r => r.Nombre).First());
         // el siguiente aprobador se busca antes de guardar, para no dejar la cadena a medias
@@ -195,6 +249,8 @@ public class ServicioAprobaciones(IAlmacen db, ServicioSolicitudes solicitudes, 
             d == Aprobar ? $"Aprobada por {quien}. El proceso de aprobación terminó." : $"Rechazada por {quien}.",
             [Evento("DICTAMEN", s, nivel, null, comentario)]);
     }
+
+    private static string Dolares(decimal v) => "US$ " + v.ToString("N0", new System.Globalization.CultureInfo("es-CL"));
 
     private SolicitudCredito Solicitud(long id) =>
         db.Tabla<SolicitudCredito>().FirstOrDefault(x => x.Id == id) ?? throw new ErrorNegocio("La evaluación de proyecto no existe.");
