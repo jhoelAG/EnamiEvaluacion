@@ -1,0 +1,34 @@
+# Integración continua (RNF-06): en cada cambio que se sube a GitHub compila la solución y corre las pruebas automáticas.
+# Gratis en repositorios de GitHub (minutos incluidos del plan gratuito).
+name: Integración continua
+
+on:
+  push:
+    branches: [desarrollo, main]
+  pull_request:
+    branches: [desarrollo, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compilar-y-probar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Compilar la web
+        run: dotnet build src/Enami.Web/Enami.Web.csproj -c Release
+      - name: Compilar la API
+        run: dotnet build src/Enami.Api/Enami.Api.csproj -c Release
+      - name: Pruebas automáticas
+        run: dotnet test tests/Enami.Pruebas/Enami.Pruebas.csproj -c Release --logger "trx;LogFileName=resultados.trx" --results-directory resultados
+      - name: Guardar el resultado de las pruebas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-pruebas
+          path: resultados

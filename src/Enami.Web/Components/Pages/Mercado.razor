@@ -17,7 +17,7 @@
 <p class="text-muted small mb-3">
     Todas las evaluaciones de proyecto usan estos valores. El dólar y la libra de cobre se consultan por API al iniciar el sistema y luego cada hora:
     el dólar observado del Banco Central (directo si hay credenciales, o a través de mindicador.cl) y, si no responde, un tipo de cambio de mercado;
-    el cobre, de COCHILCO a través de mindicador.cl. El oro y la plata los registra el robot BOT-01 desde COCHILCO.
+    el cobre, de COCHILCO a través de mindicador.cl. Además, el robot BOT-01 actualiza todos los días a las 09:00 el dólar observado, el cobre (Bolsa de Metales de Londres), el oro y la plata desde la API oficial del Banco Central de Chile; para el dólar y el cobre usa mindicador.cl como respaldo, y si ninguna fuente responde mantiene el valor vigente y avisa al administrador.
     También puede <strong>elegir una fecha</strong> para usar el dólar o el cobre de ese día, o ingresar un valor a mano. En ambos casos el valor queda
     <strong>fijado</strong>: la consulta automática no lo cambia hasta que presione «Volver al valor de hoy». Cada cambio queda en la auditoría.
 </p>

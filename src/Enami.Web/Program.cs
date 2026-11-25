@@ -118,6 +118,9 @@ app.MapGet("/exportar/evaluaciones", (HttpContext http, ServicioExportacion expo
     return Results.File(archivo, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"evaluaciones-{DateTime.Now:yyyy-MM-dd-HHmm}.xlsx");
 }).RequireAuthorization();
 
+// Punto de salud para el monitoreo (sección 6.1 del informe): responde sin consultar la base de datos.
+app.MapGet("/health/live", () => Results.Ok(new { estado = "ok", servicio = "Enami.Web", hora = DateTime.Now })).AllowAnonymous();
+
 app.Run();
 
 public partial class Program;

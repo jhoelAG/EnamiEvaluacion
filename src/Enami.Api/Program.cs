@@ -66,9 +66,19 @@ robots.MapPost("/variables/{codigo}", (string codigo, RegistroVariable v, IRepos
     try
     {
         // un valor que fijó una persona en «Dólar y minerales» (a mano o eligiendo una fecha) no lo reemplaza el robot
-        if (parametros.Ultimos().TryGetValue(codigo, out var actual) && actual.Fijado)
+        var vigentes = parametros.Ultimos();
+        if (vigentes.TryGetValue(codigo, out var actual) && actual.Fijado)
             return Results.Conflict(new { error = $"«{codigo}» está fijado por un usuario en «Dólar y minerales»; no se reemplaza.", vigente = actual });
-        parametros.Registrar(codigo, v.Valor, string.IsNullOrWhiteSpace(v.Fuente) ? "BOT-01" : v.Fuente);
+        // validación de rango: un valor muy distinto del vigente (error de unidad o de la fuente) no se guarda; el robot prueba su respaldo
+        if (ValidacionMercado.Revisar(codigo, v.Valor, vigentes.TryGetValue(codigo, out var previo) ? previo.Valor : null) is string motivo)
+        {
+            auditoria.Registrar("VARIABLE_RECHAZADA", null, robot: "BOT-01", detalle: motivo);
+            return Results.UnprocessableEntity(new { error = motivo });
+        }
+        // día al que corresponde el valor según la fuente (el Banco Central no publica los metales todos los días)
+        DateTime? fechaValor = DateTime.TryParseExact(v.FechaValor, "dd-MM-yyyy", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var f) ? f : null;
+        parametros.Registrar(codigo, v.Valor, string.IsNullOrWhiteSpace(v.Fuente) ? "BOT-01" : v.Fuente, fechaValor);
         auditoria.Registrar("VARIABLE_REGISTRADA", null, robot: "BOT-01", detalle: $"{codigo} = {v.Valor} ({RepositorioParametros.NormalizarFuente(v.Fuente ?? "BOT-01")})");
         return Results.Ok(parametros.Ultimos()[codigo]);
     }
@@ -79,6 +89,15 @@ robots.MapPost("/variables/{codigo}", (string codigo, RegistroVariable v, IRepos
 });
 
 robots.MapGet("/variables", (IRepositorioParametros parametros) => parametros.Ultimos().Values);
+
+// BOT-01 (u otro robot) informa que no pudo actualizar algún valor con ninguna de sus fuentes: queda en la auditoría (RNF-02)
+robots.MapPost("/robots/incidencias", (IncidenciaRobot i, ServicioAuditoria auditoria) =>
+{
+    var robot = string.IsNullOrWhiteSpace(i.Robot) ? "ROBOT" : i.Robot.Trim();
+    if (robot.Length > 10) robot = robot[..10];
+    auditoria.Registrar("ROBOT_FALLA", null, robot: robot, detalle: string.IsNullOrWhiteSpace(i.Detalle) ? "Falla sin detalle" : i.Detalle.Trim());
+    return Results.Ok(new { registrada = true });
+});
 
 // Valida una expresión (lo usa el editor de fórmulas u otras aplicaciones)
 robots.MapPost("/formulas/validar", (ValidarFormula f) =>
@@ -120,11 +139,17 @@ robots.MapPost("/evaluaciones/{id:long}/decision", async (long id, DecisionFlujo
 // Cadena de aprobación de una evaluación (para consultar desde el flujo o para pruebas)
 robots.MapGet("/evaluaciones/{id:long}/aprobaciones", (long id, ServicioAprobaciones aprobaciones) => aprobaciones.Historial(id));
 
+// Punto de salud para el monitoreo (sección 6.1 del informe): responde sin consultar la base de datos.
+app.MapGet("/health/live", () => Results.Ok(new { estado = "ok", servicio = "Enami.Api", hora = DateTime.Now })).AllowAnonymous();
+
 app.Run();
 
 /// <summary>Datos para calcular: el instrumento (por clave o por nombre) y los valores de las variables.</summary>
 public record SolicitudCalculo(byte? IdInstrumento, string? Instrumento, Dictionary<string, double>? Valores);
-public record RegistroVariable(double Valor, string? Fuente);
+/// <summary>FechaValor (dd-MM-yyyy, opcional): día al que corresponde el valor según la fuente.</summary>
+public record RegistroVariable(double Valor, string? Fuente, string? FechaValor = null);
+/// <summary>Falla de un robot: qué robot y qué no pudo hacer (se registra como ROBOT_FALLA en la auditoría).</summary>
+public record IncidenciaRobot(string? Robot, string? Detalle);
 public record ValidarFormula(string Expresion);
 /// <summary>Decisión que envía el flujo: el correo del aprobador y la opción que eligió en el correo de aprobación.</summary>
 /// <summary>Token: el código firmado que la aplicación incluyó en el aviso de esa aprobación (FirmaDecision).</summary>

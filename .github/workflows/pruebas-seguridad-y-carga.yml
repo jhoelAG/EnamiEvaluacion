@@ -1,0 +1,46 @@
+# Plan de pruebas TP-04 (RNF-03 y RNF-04): se ejecuta a mano desde la pestaña Actions de GitHub.
+# 1) OWASP ZAP, escaneo base (pasivo, no ataca): busca encabezados de seguridad faltantes, cookies inseguras y otras alertas.
+# 2) Prueba de carga con k6 sobre el inicio de sesión y el punto de salud (ver pruebas-carga/carga.js).
+# Ojo: el plan gratuito F1 de App Service tiene un límite de CPU diario; la carga es corta para no agotarlo.
+name: Pruebas de seguridad y carga
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Dirección de la web a probar
+        default: https://enami-jhoel-gygah4fhd7dqfsfn.brazilsouth-01.azurewebsites.net
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  seguridad-owasp-zap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Escaneo base de OWASP ZAP
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: ${{ github.event.inputs.url }}
+          allow_issue_writing: false
+          fail_action: false
+          artifact_name: informe-owasp-zap
+
+  carga-k6:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prueba de carga con k6
+        uses: grafana/run-k6-action@v1
+        env:
+          URL_WEB: ${{ github.event.inputs.url }}
+        with:
+          path: pruebas-carga/carga.js
+      - name: Guardar el resultado de la carga
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultado-carga-k6
+          path: resultado-carga.json

@@ -3,13 +3,33 @@
     "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
+      "$connections": {
+        "type": "Object",
+        "defaultValue": {}
+      },
       "urlApi": {
         "type": "String",
-        "defaultValue": "https://enami-api-TU-NOMBRE.azurewebsites.net"
+        "defaultValue": ""
       },
       "claveApi": {
         "type": "SecureString",
-        "defaultValue": "PEGA-AQUI-LA-CLAVE-DE-ClaveApiRobots"
+        "defaultValue": ""
+      },
+      "bcchUsuario": {
+        "type": "SecureString",
+        "defaultValue": ""
+      },
+      "bcchClave": {
+        "type": "SecureString",
+        "defaultValue": ""
+      },
+      "correoAlertas": {
+        "type": "String",
+        "defaultValue": ""
+      },
+      "probarAlerta": {
+        "type": "Bool",
+        "defaultValue": false
       }
     },
     "triggers": {
@@ -19,35 +39,409 @@
           "frequency": "Day",
           "interval": 1,
           "timeZone": "Pacific SA Standard Time",
-          "schedule": { "hours": [ "9" ], "minutes": [ 0 ] }
+          "schedule": {
+            "hours": [
+              "9"
+            ],
+            "minutes": [
+              0
+            ]
+          }
         }
       }
     },
     "actions": {
-      "Consultar_indicadores": {
+      "Consultar_mindicador": {
         "type": "Http",
-        "inputs": { "method": "GET", "uri": "https://mindicador.cl/api" },
+        "inputs": {
+          "method": "GET",
+          "uri": "https://mindicador.cl/api"
+        },
         "runAfter": {}
       },
-      "Registrar_dolar": {
+      "Dolar_consultar_bcch": {
+        "type": "Http",
+        "runtimeConfiguration": {
+          "secureData": {
+            "properties": [
+              "inputs"
+            ]
+          }
+        },
+        "inputs": {
+          "method": "GET",
+          "uri": "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx",
+          "queries": {
+            "user": "@parameters('bcchUsuario')",
+            "pass": "@parameters('bcchClave')",
+            "function": "GetSeries",
+            "timeseries": "F073.TCO.PRE.Z.D",
+            "firstdate": "@{formatDateTime(addDays(utcNow(), -15), 'yyyy-MM-dd')}",
+            "lastdate": "@{formatDateTime(utcNow(), 'yyyy-MM-dd')}"
+          }
+        },
+        "runAfter": {
+          "Consultar_mindicador": [
+            "Succeeded",
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      },
+      "Dolar_valores_publicados": {
+        "type": "Query",
+        "inputs": {
+          "from": "@coalesce(body('Dolar_consultar_bcch')?['Series']?['Obs'], json('[]'))",
+          "where": "@equals(item()?['statusCode'], 'OK')"
+        },
+        "runAfter": {
+          "Dolar_consultar_bcch": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Dolar_registrar_bcch": {
         "type": "Http",
         "inputs": {
           "method": "POST",
           "uri": "@{parameters('urlApi')}/api/variables/Dolar",
-          "headers": { "Content-Type": "application/json", "X-Api-Key": "@parameters('claveApi')" },
-          "body": { "valor": "@body('Consultar_indicadores')?['dolar']?['valor']", "fuente": "API_BCCH" }
+          "headers": {
+            "Content-Type": "application/json",
+            "X-Api-Key": "@parameters('claveApi')"
+          },
+          "body": {
+            "valor": "@float(last(body('Dolar_valores_publicados'))?['value'])",
+            "fuente": "API_BCCH",
+            "fechaValor": "@{last(body('Dolar_valores_publicados'))?['indexDateString']}"
+          }
         },
-        "runAfter": { "Consultar_indicadores": [ "Succeeded" ] }
+        "runAfter": {
+          "Dolar_valores_publicados": [
+            "Succeeded"
+          ]
+        }
       },
-      "Registrar_cobre": {
+      "Cobre_consultar_bcch": {
+        "type": "Http",
+        "runtimeConfiguration": {
+          "secureData": {
+            "properties": [
+              "inputs"
+            ]
+          }
+        },
+        "inputs": {
+          "method": "GET",
+          "uri": "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx",
+          "queries": {
+            "user": "@parameters('bcchUsuario')",
+            "pass": "@parameters('bcchClave')",
+            "function": "GetSeries",
+            "timeseries": "F019.PPB.PRE.100.D",
+            "firstdate": "@{formatDateTime(addDays(utcNow(), -15), 'yyyy-MM-dd')}",
+            "lastdate": "@{formatDateTime(utcNow(), 'yyyy-MM-dd')}"
+          }
+        },
+        "runAfter": {
+          "Consultar_mindicador": [
+            "Succeeded",
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      },
+      "Cobre_valores_publicados": {
+        "type": "Query",
+        "inputs": {
+          "from": "@coalesce(body('Cobre_consultar_bcch')?['Series']?['Obs'], json('[]'))",
+          "where": "@equals(item()?['statusCode'], 'OK')"
+        },
+        "runAfter": {
+          "Cobre_consultar_bcch": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Cobre_registrar_bcch": {
         "type": "Http",
         "inputs": {
           "method": "POST",
           "uri": "@{parameters('urlApi')}/api/variables/PrecioCuLb",
-          "headers": { "Content-Type": "application/json", "X-Api-Key": "@parameters('claveApi')" },
-          "body": { "valor": "@body('Consultar_indicadores')?['libra_cobre']?['valor']", "fuente": "RPA_COCHILCO" }
+          "headers": {
+            "Content-Type": "application/json",
+            "X-Api-Key": "@parameters('claveApi')"
+          },
+          "body": {
+            "valor": "@float(last(body('Cobre_valores_publicados'))?['value'])",
+            "fuente": "API_BCCH",
+            "fechaValor": "@{last(body('Cobre_valores_publicados'))?['indexDateString']}"
+          }
         },
-        "runAfter": { "Consultar_indicadores": [ "Succeeded" ] }
+        "runAfter": {
+          "Cobre_valores_publicados": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Oro_consultar_bcch": {
+        "type": "Http",
+        "runtimeConfiguration": {
+          "secureData": {
+            "properties": [
+              "inputs"
+            ]
+          }
+        },
+        "inputs": {
+          "method": "GET",
+          "uri": "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx",
+          "queries": {
+            "user": "@parameters('bcchUsuario')",
+            "pass": "@parameters('bcchClave')",
+            "function": "GetSeries",
+            "timeseries": "F019.PPB.PRE.44.D",
+            "firstdate": "@{formatDateTime(addDays(utcNow(), -15), 'yyyy-MM-dd')}",
+            "lastdate": "@{formatDateTime(utcNow(), 'yyyy-MM-dd')}"
+          }
+        },
+        "runAfter": {
+          "Consultar_mindicador": [
+            "Succeeded",
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      },
+      "Oro_valores_publicados": {
+        "type": "Query",
+        "inputs": {
+          "from": "@coalesce(body('Oro_consultar_bcch')?['Series']?['Obs'], json('[]'))",
+          "where": "@equals(item()?['statusCode'], 'OK')"
+        },
+        "runAfter": {
+          "Oro_consultar_bcch": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Oro_registrar_bcch": {
+        "type": "Http",
+        "inputs": {
+          "method": "POST",
+          "uri": "@{parameters('urlApi')}/api/variables/PrecioAu",
+          "headers": {
+            "Content-Type": "application/json",
+            "X-Api-Key": "@parameters('claveApi')"
+          },
+          "body": {
+            "valor": "@float(last(body('Oro_valores_publicados'))?['value'])",
+            "fuente": "API_BCCH",
+            "fechaValor": "@{last(body('Oro_valores_publicados'))?['indexDateString']}"
+          }
+        },
+        "runAfter": {
+          "Oro_valores_publicados": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Plata_consultar_bcch": {
+        "type": "Http",
+        "runtimeConfiguration": {
+          "secureData": {
+            "properties": [
+              "inputs"
+            ]
+          }
+        },
+        "inputs": {
+          "method": "GET",
+          "uri": "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx",
+          "queries": {
+            "user": "@parameters('bcchUsuario')",
+            "pass": "@parameters('bcchClave')",
+            "function": "GetSeries",
+            "timeseries": "F019.PPB.PRE.45.D",
+            "firstdate": "@{formatDateTime(addDays(utcNow(), -15), 'yyyy-MM-dd')}",
+            "lastdate": "@{formatDateTime(utcNow(), 'yyyy-MM-dd')}"
+          }
+        },
+        "runAfter": {
+          "Consultar_mindicador": [
+            "Succeeded",
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      },
+      "Plata_valores_publicados": {
+        "type": "Query",
+        "inputs": {
+          "from": "@coalesce(body('Plata_consultar_bcch')?['Series']?['Obs'], json('[]'))",
+          "where": "@equals(item()?['statusCode'], 'OK')"
+        },
+        "runAfter": {
+          "Plata_consultar_bcch": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Plata_registrar_bcch": {
+        "type": "Http",
+        "inputs": {
+          "method": "POST",
+          "uri": "@{parameters('urlApi')}/api/variables/PrecioAg",
+          "headers": {
+            "Content-Type": "application/json",
+            "X-Api-Key": "@parameters('claveApi')"
+          },
+          "body": {
+            "valor": "@float(last(body('Plata_valores_publicados'))?['value'])",
+            "fuente": "API_BCCH",
+            "fechaValor": "@{last(body('Plata_valores_publicados'))?['indexDateString']}"
+          }
+        },
+        "runAfter": {
+          "Plata_valores_publicados": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Dolar_registrar_respaldo": {
+        "type": "Http",
+        "inputs": {
+          "method": "POST",
+          "uri": "@{parameters('urlApi')}/api/variables/Dolar",
+          "headers": {
+            "Content-Type": "application/json",
+            "X-Api-Key": "@parameters('claveApi')"
+          },
+          "body": {
+            "valor": "@body('Consultar_mindicador')?['dolar']?['valor']",
+            "fuente": "API_BCCH"
+          }
+        },
+        "runAfter": {
+          "Dolar_registrar_bcch": [
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      },
+      "Cobre_registrar_respaldo": {
+        "type": "Http",
+        "inputs": {
+          "method": "POST",
+          "uri": "@{parameters('urlApi')}/api/variables/PrecioCuLb",
+          "headers": {
+            "Content-Type": "application/json",
+            "X-Api-Key": "@parameters('claveApi')"
+          },
+          "body": {
+            "valor": "@body('Consultar_mindicador')?['libra_cobre']?['valor']",
+            "fuente": "RPA_COCHILCO"
+          }
+        },
+        "runAfter": {
+          "Cobre_registrar_bcch": [
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      },
+      "Revisar_resultados": {
+        "type": "Compose",
+        "inputs": "@concat(if(parameters('probarAlerta'), 'Prueba de alerta (simulada); ', ''), if(or(equals(actions('Dolar_registrar_bcch')?['status'], 'Succeeded'), equals(actions('Dolar_registrar_bcch')?['outputs']?['statusCode'], 409), equals(actions('Dolar_registrar_respaldo')?['status'], 'Succeeded'), equals(actions('Dolar_registrar_respaldo')?['outputs']?['statusCode'], 409)), '', 'Dólar observado; '), if(or(equals(actions('Cobre_registrar_bcch')?['status'], 'Succeeded'), equals(actions('Cobre_registrar_bcch')?['outputs']?['statusCode'], 409), equals(actions('Cobre_registrar_respaldo')?['status'], 'Succeeded'), equals(actions('Cobre_registrar_respaldo')?['outputs']?['statusCode'], 409)), '', 'Precio del cobre; '), if(or(equals(actions('Oro_registrar_bcch')?['status'], 'Succeeded'), equals(actions('Oro_registrar_bcch')?['outputs']?['statusCode'], 409)), '', 'Precio del oro; '), if(or(equals(actions('Plata_registrar_bcch')?['status'], 'Succeeded'), equals(actions('Plata_registrar_bcch')?['outputs']?['statusCode'], 409)), '', 'Precio de la plata; '))",
+        "runAfter": {
+          "Dolar_registrar_respaldo": [
+            "Succeeded",
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ],
+          "Cobre_registrar_respaldo": [
+            "Succeeded",
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ],
+          "Oro_registrar_bcch": [
+            "Succeeded",
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ],
+          "Plata_registrar_bcch": [
+            "Succeeded",
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      },
+      "Si_hubo_fallas": {
+        "type": "If",
+        "expression": {
+          "not": [
+            {
+              "equals": [
+                "@outputs('Revisar_resultados')",
+                ""
+              ]
+            }
+          ]
+        },
+        "runAfter": {
+          "Revisar_resultados": [
+            "Succeeded"
+          ]
+        },
+        "actions": {
+          "Registrar_incidencia_en_la_auditoria": {
+            "type": "Http",
+            "inputs": {
+              "method": "POST",
+              "uri": "@{parameters('urlApi')}/api/robots/incidencias",
+              "headers": {
+                "Content-Type": "application/json",
+                "X-Api-Key": "@parameters('claveApi')"
+              },
+              "body": {
+                "robot": "BOT-01",
+                "detalle": "@{concat('No se pudo actualizar con ninguna fuente: ', outputs('Revisar_resultados'), 'se mantiene el valor vigente.')}"
+              }
+            },
+            "runAfter": {}
+          },
+          "Avisar_al_administrador": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['outlook']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/v2/Mail",
+              "body": {
+                "To": "@parameters('correoAlertas')",
+                "Subject": "BOT-01: no se pudieron actualizar valores de mercado",
+                "Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px\"><p>El robot BOT-01 no pudo actualizar, ni con la API del Banco Central de Chile ni con su respaldo:</p><p><b>@{outputs('Revisar_resultados')}</b></p><p>La plataforma mantiene el último valor registrado. Revise «Dólar y minerales» y, si hace falta, ingrese el valor a mano.</p><p>El detalle de la ejecución está en el historial del flujo bot01-mercado en Azure.</p></div>",
+                "Importance": "High"
+              }
+            },
+            "runAfter": {}
+          }
+        },
+        "else": {
+          "actions": {}
+        }
       }
     },
     "outputs": {}
