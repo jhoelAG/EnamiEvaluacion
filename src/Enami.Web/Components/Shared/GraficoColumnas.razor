@@ -28,7 +28,7 @@
             {
                 double v = Series[k].Valores[i];
                 if (v <= 0) continue;
-                double alto = baseY - Y(v), y = baseY - alto;
+                double alto = Y(0) - Y(v), y = baseY - alto;   // el alto sale del valor; el tramo se apila sobre el anterior
                 double visible = Math.Max(alto - (k == ultima ? 0 : 2), 1);
                 var titulo = $"{Categorias[i]} · {Series[k].Nombre}: {v.ToString("N0", Formato.Chile)}";
                 if (k == ultima && visible > 4)
