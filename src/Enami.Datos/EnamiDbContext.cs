@@ -375,7 +375,8 @@ public class EnamiDbContext(DbContextOptions<EnamiDbContext> options) : DbContex
 
         m.Entity<Auditoria>(e =>
         {
-            e.ToTable("AUDITORIA");
+            // la tabla tiene un trigger de solo inserción (RegistroPersistencia): EF Core debe saberlo para guardar sin la cláusula OUTPUT
+            e.ToTable("AUDITORIA", t => t.HasTrigger("TR_AUDITORIA_solo_insercion"));
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id_auditoria").ValueGeneratedOnAdd();
             e.Property(x => x.Fecha).HasColumnName("fecha").HasColumnType("datetime2");
