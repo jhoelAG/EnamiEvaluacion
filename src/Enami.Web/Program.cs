@@ -18,13 +18,15 @@ builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 builder.Services.AddPersistenciaEnami(builder.Configuration);
 // Membrete del dictamen en PDF (sección «Dictamen»): el logo oficial se lee de Dictamen:RutaLogo (por defecto
 // wwwroot/img/logo-dictamen.png, PNG o JPG); si el archivo no existe, el membrete usa la sigla en texto.
+// Dictamen:ColorAcento es el color corporativo del logo, para el filete del membrete y los títulos.
 // Dictamen:Leyenda agrega una leyenda al pie de cada página (por ejemplo, «Prototipo académico · datos de prueba.»).
 var rutaLogo = Path.Combine(builder.Environment.ContentRootPath,
     builder.Configuration["Dictamen:RutaLogo"] ?? Path.Combine("wwwroot", "img", "logo-dictamen.png"));
 builder.Services.AddSingleton(new OpcionesDictamen
 {
     Logo = File.Exists(rutaLogo) ? File.ReadAllBytes(rutaLogo) : null,
-    Leyenda = builder.Configuration["Dictamen:Leyenda"]
+    Leyenda = builder.Configuration["Dictamen:Leyenda"],
+    ColorAcento = builder.Configuration["Dictamen:ColorAcento"]
 });
 
 // Inicio de sesión con cookie (RF-11): expira tras 30 minutos sin actividad y se revalida contra la base cada minuto,

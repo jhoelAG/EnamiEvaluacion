@@ -15,6 +15,11 @@ public class OpcionesDictamen
     public byte[]? Logo { get; set; }
     public string Sigla { get; set; } = "ENAMI";
     public string Institucion { get; set; } = "Empresa Nacional de Minería";
+    /// <summary>
+    /// Color de acento del membrete y de los títulos («#RRGGBB»), normalmente el color corporativo del logo. Si no tiene
+    /// contraste suficiente para texto, los títulos usan el color de texto y el acento queda solo en el filete del membrete.
+    /// </summary>
+    public string? ColorAcento { get; set; }
     /// <summary>Leyenda opcional al pie de cada página (por ejemplo, «Prototipo académico · datos de prueba»).</summary>
     public string? Leyenda { get; set; }
 }
@@ -30,6 +35,7 @@ public class ServicioDictamen(IAlmacen db, ServicioSolicitudes solicitudes, Serv
 {
     private static readonly NumberFormatInfo Chile = new() { NumberDecimalSeparator = ",", NumberGroupSeparator = ".", NegativeSign = "-" };
     private readonly OpcionesDictamen _o = opciones ?? new OpcionesDictamen();
+    private ColorPdf Acento => ColorPdf.Desde(_o.ColorAcento) ?? ColorPdf.Acento;
 
     /// <summary>Nombre del archivo y su contenido, o null si la evaluación no existe o el usuario no puede verla.</summary>
     public (string Archivo, byte[] Contenido, string Codigo)? Generar(long idSolicitud, UsuarioSesion usuario, DateTime? ahora = null)
@@ -66,6 +72,10 @@ public class ServicioDictamen(IAlmacen db, ServicioSolicitudes solicitudes, Serv
                 $"Página {pagina} de {total}",
                 $"Emitido el {momento:dd-MM-yyyy HH:mm} por {usuario.NombreCompleto} desde el Sistema de Evaluación de Proyectos de Fomento." +
                 (string.IsNullOrWhiteSpace(_o.Leyenda) ? "" : $" {_o.Leyenda.Trim()}")));
+
+        pdf.ColorTitulos = ColorPdf.Desde(_o.ColorAcento) is { } propio
+            ? (propio.ContrasteSobreBlanco() >= 4.5 ? propio : ColorPdf.Texto)
+            : ColorPdf.AcentoTexto;
 
         // título y datos de control
         pdf.Texto("Dictamen de evaluación de proyecto", 17, true);
@@ -205,7 +215,7 @@ public class ServicioDictamen(IAlmacen db, ServicioSolicitudes solicitudes, Serv
         doc.EscribirTextoDerecha(derecha, arriba - 21, $"N.º {nro}", 11, true, ColorPdf.Texto);
         doc.EscribirTextoDerecha(derecha, arriba - 32, $"Emitido el {momento:dd-MM-yyyy HH:mm}", 7.5f, false, ColorPdf.Secundario);
         doc.Espacio(alto + 8);
-        doc.Rectangulo(DocumentoPdf.Margen, doc.Y - 1.5f, doc.AnchoUtil, 1.5f, ColorPdf.Acento);
+        doc.Rectangulo(DocumentoPdf.Margen, doc.Y - 1.5f, doc.AnchoUtil, 1.5f, Acento);
         doc.Espacio(20);
     }
 

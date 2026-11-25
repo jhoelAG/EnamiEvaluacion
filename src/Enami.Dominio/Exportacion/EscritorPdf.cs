@@ -20,6 +20,22 @@ public readonly record struct ColorPdf(byte R, byte G, byte B)
     /// <summary>Turquesa oscuro para títulos (#00796B, contraste 5,3:1).</summary>
     public static readonly ColorPdf AcentoTexto = new(0, 121, 107);
 
+    /// <summary>Lee «#RRGGBB»; null si el texto no es un color válido.</summary>
+    public static ColorPdf? Desde(string? hex)
+    {
+        var h = (hex ?? "").Trim().TrimStart('#');
+        return h.Length == 6 && int.TryParse(h, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var v)
+            ? new ColorPdf((byte)(v >> 16), (byte)(v >> 8), (byte)v) : null;
+    }
+
+    /// <summary>Contraste WCAG de este color sobre blanco (4,5:1 es el mínimo para texto normal).</summary>
+    public double ContrasteSobreBlanco()
+    {
+        static double C(byte x) { double c = x / 255.0; return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4); }
+        double l = 0.2126 * C(R) + 0.7152 * C(G) + 0.0722 * C(B);
+        return 1.05 / (l + 0.05);
+    }
+
     internal string Relleno => $"{N(R)} {N(G)} {N(B)} rg";
     internal string Trazo => $"{N(R)} {N(G)} {N(B)} RG";
     private static string N(byte v) => (v / 255.0).ToString("0.###", CultureInfo.InvariantCulture);
@@ -187,6 +203,8 @@ public sealed class DocumentoPdf
 
     /// <summary>Posición vertical actual (desde abajo, en puntos).</summary>
     public float Y { get; private set; }
+    /// <summary>Color de los títulos de sección (debe tener contraste suficiente sobre blanco).</summary>
+    public ColorPdf ColorTitulos { get; set; } = ColorPdf.AcentoTexto;
     public int Paginas => _paginas.Count;
     public ImagenPdf? Logo => _logo;
 
@@ -231,7 +249,7 @@ public sealed class DocumentoPdf
     {
         Reservar(130);   // el título no queda solo al pie: pasa a la página siguiente con su contenido
         Espacio(16);
-        Texto(titulo.ToUpperInvariant(), 9.5f, true, ColorPdf.AcentoTexto);
+        Texto(titulo.ToUpperInvariant(), 9.5f, true, ColorTitulos);
         Espacio(4);
         Linea(Margen, Y, Margen + AnchoUtil, Y, ColorPdf.Linea, 0.6f);
         Espacio(8);
