@@ -1,11 +1,12 @@
-@* Barra horizontal simple para el tablero: etiqueta, barra proporcional (0 a 100) y texto con el valor. *@
-<div class="mb-2">
-    <div class="small">@Etiqueta</div>
-    <div class="d-flex align-items-center gap-2">
-        <div class="flex-grow-1 bg-light rounded" style="height:10px">
-            <div class="bg-@Color rounded" style="height:10px;width:@(Math.Clamp(Ancho, 0, 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></div>
-        </div>
-        <div class="small text-muted text-nowrap">@Texto</div>
+@* Fila de una lista de barras (ranking o medidor): nombre y valor arriba, barra proporcional (0 a 100) abajo.
+   La pista es un tono suave del mismo color; el extremo de la barra es redondeado. *@
+<div class="mb-2" title="@Etiqueta: @Texto">
+    <div class="d-flex justify-content-between gap-2 small">
+        <span class="text-truncate">@Etiqueta</span>
+        <span class="text-nowrap fw-semibold">@Texto</span>
+    </div>
+    <div style="height:8px;border-radius:4px;background:@Pista">
+        <div style="height:8px;border-radius:4px;background:@Color;width:@(Graficos.N(Math.Clamp(Ancho, Ancho > 0 ? 1.5 : 0, 100)))%"></div>
     </div>
 </div>
 
@@ -13,5 +14,6 @@
     [Parameter, EditorRequired] public string Etiqueta { get; set; } = "";
     [Parameter, EditorRequired] public double Ancho { get; set; }
     [Parameter] public string Texto { get; set; } = "";
-    [Parameter] public string Color { get; set; } = "primary";
+    [Parameter] public string Color { get; set; } = Graficos.Turquesa;
+    [Parameter] public string Pista { get; set; } = Graficos.TurquesaSuave;
 }

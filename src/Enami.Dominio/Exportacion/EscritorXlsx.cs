@@ -109,6 +109,10 @@ public static class EscritorXlsx
                 x.WriteStartElement("cellXfs"); x.WriteAttributeString("count", "4");
                 Xf(x, 0, 0); Xf(x, 0, 1); Xf(x, 3, 0); Xf(x, 164, 0);
                 x.WriteEndElement();
+                // estilo «Normal» declarado, como lo exige el formato (sin él algunos programas avisan que falta el estilo por defecto)
+                x.WriteStartElement("cellStyles"); x.WriteAttributeString("count", "1");
+                x.WriteStartElement("cellStyle"); x.WriteAttributeString("name", "Normal"); x.WriteAttributeString("xfId", "0"); x.WriteAttributeString("builtinId", "0");
+                x.WriteEndElement(); x.WriteEndElement();
                 x.WriteEndElement();
             });
             Parte(zip, "xl/_rels/workbook.xml.rels", x =>

@@ -1,0 +1,17 @@
+@* Cifra destacada del resumen: etiqueta, valor grande y una línea de contexto. Un borde de color identifica la serie cuando la hay. *@
+<div class="col-sm-6 col-xl-3">
+    <div class="card border-0 shadow-sm h-100" style="@(Color is null ? "" : $"border-left:4px solid {Color} !important")">
+        <div class="card-body py-3">
+            <div class="small text-muted">@Etiqueta</div>
+            <div class="fs-2 fw-semibold lh-sm">@Valor</div>
+            <div class="small text-muted">@Detalle</div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Etiqueta { get; set; } = "";
+    [Parameter, EditorRequired] public string Valor { get; set; } = "";
+    [Parameter] public string Detalle { get; set; } = "";
+    [Parameter] public string? Color { get; set; }
+}

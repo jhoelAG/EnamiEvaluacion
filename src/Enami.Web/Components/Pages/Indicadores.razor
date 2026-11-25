@@ -5,226 +5,249 @@
 @inject ServicioCatalogos Catalogos
 @inject ServicioGestion Gestion
 
-<PageTitle>Indicadores · Evaluación Fomento</PageTitle>
+<PageTitle>Tablero de gestión · Evaluación Fomento</PageTitle>
 
-<h1 class="h3 mb-1">Tablero de indicadores y gestión</h1>
-<p class="text-muted small">
-    Indicadores clave de la plataforma (sección 4.1 del informe). Se calculan con los datos que la propia plataforma registra:
-    fechas de ingreso y dictamen, cadena de aprobación, auditoría y valores de mercado. Días hábiles: lunes a viernes; jornada de 08:30 a 17:30.
-</p>
-
-<div class="row g-2 align-items-end mb-3">
-    <div class="col-auto">
-        <label class="form-label small mb-0" for="ind-desde">Desde</label>
-        <input id="ind-desde" type="date" class="form-control form-control-sm" @bind="_desde" @bind:after="Calcular" />
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <div>
+        <h1 class="h3 mb-0">Tablero de gestión</h1>
+        <div class="text-muted small">Evaluaciones de proyectos de fomento · @_desde.ToString("dd-MM-yyyy") al @_hasta.ToString("dd-MM-yyyy") · @NombreOficina</div>
     </div>
-    <div class="col-auto">
-        <label class="form-label small mb-0" for="ind-hasta">Hasta</label>
-        <input id="ind-hasta" type="date" class="form-control form-control-sm" @bind="_hasta" @bind:after="Calcular" />
-    </div>
-    <div class="col-auto">
-        <label class="form-label small mb-0" for="ind-oficina">Oficina</label>
-        <select id="ind-oficina" class="form-select form-select-sm" @bind="_oficina" @bind:after="Calcular">
-            <option value="">Todas</option>
+    <div class="d-flex flex-wrap align-items-end gap-2">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Período">
+            <button class="btn @(_periodo == "mes" ? "btn-primary" : "btn-outline-primary")" @onclick='() => Periodo("mes")'>Este mes</button>
+            <button class="btn @(_periodo == "trimestre" ? "btn-primary" : "btn-outline-primary")" @onclick='() => Periodo("trimestre")'>Últimos 3 meses</button>
+            <button class="btn @(_periodo == "anio" ? "btn-primary" : "btn-outline-primary")" @onclick='() => Periodo("anio")'>Este año</button>
+        </div>
+        <input type="date" class="form-control form-control-sm" style="width:auto" aria-label="Desde" @bind="_desde" @bind:after="FechasManuales" />
+        <input type="date" class="form-control form-control-sm" style="width:auto" aria-label="Hasta" @bind="_hasta" @bind:after="FechasManuales" />
+        <select class="form-select form-select-sm" style="width:auto" aria-label="Oficina" @bind="_oficina" @bind:after="Calcular">
+            <option value="">Todas las oficinas</option>
             @foreach (var o in _oficinas)
             {
                 <option value="@o.Id">@o.Nombre</option>
             }
         </select>
     </div>
-    <div class="col-auto">
-        <button class="btn btn-outline-secondary btn-sm" @onclick="MesActual">Mes actual</button>
-    </div>
 </div>
 
-@if (_r is { } r)
+@if (_r is { } r && _g is { } g)
 {
-    <div class="row g-3 mb-4">
-        <Tarjeta Codigo="TPE" Nombre="Tiempo promedio de tramitación"
-                 Valor="@(r.Tpe is double t ? Cl($"{t:N1} h") : "—")"
-                 Meta="−33 % respecto de la línea base (se mide en la operación en paralelo, F3)"
-                 Base="@Cl($"{r.DetalleTpe.Count} evaluaciones con dictamen")" />
-        <Tarjeta Codigo="TEP" Nombre="Tasa de error de parámetros de mercado"
-                 Valor="@Pct(r.Tep)" Meta="0 %"
-                 Estado="@(r.Tep is double p ? (bool?)(p <= ServicioIndicadores.MetaTep) : null)"
-                 Base="@Cl($"{r.DetalleTep.Count} evaluaciones calculadas")" />
-        <Tarjeta Codigo="ITR" Nombre="Índice de trazabilidad"
-                 Valor="@Pct(r.Itr)" Meta="100 %"
-                 Estado="@(r.Itr is double i ? (bool?)(i >= ServicioIndicadores.MetaItr) : null)"
-                 Base="@Cl($"{r.DetalleItr.Count} evaluaciones con dictamen")" />
-        <Tarjeta Codigo="IAM" Nombre="Actualización automática de mercado"
-                 Valor="@Pct(r.Iam)" Meta="≥ 95 % de los días hábiles antes de las 09:30"
-                 Estado="@(r.Iam is double m ? (bool?)(m >= ServicioIndicadores.MetaIam) : null)"
-                 Base="@Cl($"{r.DetalleIam.Count} días hábiles")" />
+    @* 1. Resumen del período *@
+    <div class="row g-3 mb-3">
+        <Cifra Etiqueta="Evaluaciones ingresadas" Valor="@_ingresadas.ToString("N0", Formato.Chile)" Detalle="registradas en el período" />
+        <Cifra Etiqueta="Aprobadas" Valor="@_aprobadas.ToString("N0", Formato.Chile)" Color="@Graficos.Turquesa"
+               Detalle="@DetalleAprobadas" />
+        <Cifra Etiqueta="Rechazadas" Valor="@_rechazadas.ToString("N0", Formato.Chile)" Color="@Graficos.Naranjo"
+               Detalle="@DetalleRechazadas" />
+        <Cifra Etiqueta="Monto aprobado" Valor="@Formato.Dolares((double)_monto)" Detalle="suma de los créditos aprobados" />
     </div>
 
-    <details class="mb-3" open="@(r.DetalleTpe.Count > 0)">
-        <summary class="fw-semibold">TPE · horas hábiles entre el ingreso y el dictamen</summary>
-        @if (r.DetalleTpe.Count == 0) { <p class="text-muted small mt-2">No hay evaluaciones con dictamen en el período.</p> }
-        else
-        {
-            <table class="table table-sm tabla-compacta align-middle mt-2">
-                <thead><tr><th>Evaluación</th><th>Dictamen</th><th>Ingreso</th><th>Fecha del dictamen</th><th class="text-end">Horas hábiles</th></tr></thead>
-                <tbody>
-                    @foreach (var f in r.DetalleTpe)
+    @* 2. Evolución y causales *@
+    <div class="row g-3 mb-3">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm h-100"><div class="card-body">
+                <h2 class="h6 mb-2">Evaluaciones resueltas por mes</h2>
+                @if (_aprobadas + _rechazadas == 0) { <p class="text-muted small mb-0">No hay evaluaciones aprobadas ni rechazadas en el período.</p> }
+                else
+                {
+                    <GraficoColumnas Categorias="_meses" Series="_seriesMes" Titulo="Evaluaciones aprobadas y rechazadas por mes" />
+                }
+                <details class="small mt-2">
+                    <summary class="text-muted">Ver datos por mes y oficina</summary>
+                    <table class="table table-sm tabla-compacta align-middle mt-2 mb-0">
+                        <thead><tr><th>Mes</th><th>Oficina</th><th class="text-end">Ingresadas</th><th class="text-end">Aprobadas</th><th class="text-end">Rechazadas</th><th class="text-end">Tasa de aprobación</th></tr></thead>
+                        <tbody>
+                            @foreach (var f in g.PorMesYOficina)
+                            {
+                                <tr><td>@f.Mes.ToString("MMM yyyy", Formato.Chile)</td><td>@f.Oficina</td><td class="text-end">@f.Ingresadas</td>
+                                    <td class="text-end">@f.Aprobadas</td><td class="text-end">@f.Rechazadas</td><td class="text-end">@(f.TasaAprobacion is double t ? Pct(t) : "—")</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </details>
+            </div></div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm h-100"><div class="card-body">
+                <h2 class="h6 mb-3">Principales causales de rechazo</h2>
+                @if (g.Causales.Count == 0) { <p class="text-muted small mb-0">No hay rechazos en el período.</p> }
+                else
+                {
+                    var max = g.Causales.Max(c => c.Veces);
+                    foreach (var c in g.Causales)
                     {
-                        <tr><td><a href="evaluaciones/@f.Id">@f.Nro</a></td><td>@Estado(f.Estado)</td><td>@f.Ingreso.ToString("dd-MM-yyyy HH:mm")</td>
-                            <td>@f.Dictamen.ToString("dd-MM-yyyy HH:mm")</td><td class="text-end">@f.HorasHabiles.ToString("N1", Formato.Chile)</td></tr>
+                        <Barra Etiqueta="@($"{c.Codigo} · {c.Descripcion}")" Ancho="@(100.0 * c.Veces / max)" Texto="@c.Veces.ToString(Formato.Chile)"
+                               Color="@Graficos.Naranjo" Pista="@Graficos.NaranjoSuave" />
                     }
-                </tbody>
-            </table>
-        }
-    </details>
+                }
+            </div></div>
+        </div>
+    </div>
 
-    <details class="mb-3" open="@(r.DetalleTep.Any(f => f.Problema is not null))">
-        <summary class="fw-semibold">TEP · valores de mercado usados en cada cálculo</summary>
-        @if (r.DetalleTep.Count == 0) { <p class="text-muted small mt-2">No hay evaluaciones calculadas en el período.</p> }
-        else
-        {
-            <table class="table table-sm tabla-compacta align-middle mt-2">
-                <thead><tr><th>Evaluación</th><th>Último cálculo</th><th>Resultado</th></tr></thead>
-                <tbody>
-                    @foreach (var f in r.DetalleTep)
-                    {
-                        <tr><td><a href="evaluaciones/@f.Id">@f.Nro</a></td><td>@f.FechaCalculo.ToString("dd-MM-yyyy HH:mm")</td>
-                            <td>@if (f.Problema is null) { <span class="text-success">Dólar y cobre vigentes</span> } else { <span class="text-danger">@f.Problema</span> }</td></tr>
-                    }
-                </tbody>
-            </table>
-        }
-    </details>
-
-    <details class="mb-3" open="@(r.DetalleItr.Any(f => !f.Trazable))">
-        <summary class="fw-semibold">ITR · registro de cada evaluación con dictamen</summary>
-        @if (r.DetalleItr.Count == 0) { <p class="text-muted small mt-2">No hay evaluaciones con dictamen en el período.</p> }
-        else
-        {
-            <table class="table table-sm tabla-compacta align-middle mt-2">
-                <thead><tr><th>Evaluación</th><th>Dictamen</th><th>Registro</th></tr></thead>
-                <tbody>
-                    @foreach (var f in r.DetalleItr)
-                    {
-                        <tr><td><a href="evaluaciones/@f.Id">@f.Nro</a></td><td>@Estado(f.Estado)</td>
-                            <td>@if (f.Trazable) { <span class="text-success">Completo</span> } else { <span class="text-danger">@string.Join("; ", f.Faltas)</span> }</td></tr>
-                    }
-                </tbody>
-            </table>
-        }
-    </details>
-
-    <details class="mb-3">
-        <summary class="fw-semibold">IAM · primera actualización automática de cada día hábil</summary>
-        @if (r.DetalleIam.Count == 0) { <p class="text-muted small mt-2">No hay días hábiles transcurridos en el período.</p> }
-        else
-        {
-            <table class="table table-sm tabla-compacta align-middle mt-2">
-                <thead><tr><th>Día</th><th>Dólar</th><th>Cobre</th><th>Antes de las 09:30</th></tr></thead>
-                <tbody>
-                    @foreach (var f in r.DetalleIam)
-                    {
-                        <tr><td>@f.Dia.ToString("ddd dd-MM-yyyy", Formato.Chile)</td><td>@Hora(f.Dolar)</td><td>@Hora(f.Cobre)</td>
-                            <td>@(f.Cumple ? "Sí" : "No")</td></tr>
-                    }
-                </tbody>
-            </table>
-        }
-    </details>
-
-    <p class="text-muted small">
-        Notas: el TPE no tiene una meta absoluta porque se compara con la línea base que se medirá con la planilla Excel durante la operación
-        en paralelo (F3). El TEP no cuenta los valores que la Jefatura fijó a propósito en «Dólar y minerales». El IAM cuenta las
-        actualizaciones de BOT-01 y de la consulta automática de la plataforma, no las ingresadas a mano.
-    </p>
-}
-
-@if (_g is { } g)
-{
-    <h2 class="h5 mt-4 mb-1">Gestión</h2>
-    <p class="text-muted small">Preguntas de negocio de la Gerencia de Fomento (sección 4.3 del informe), para el mismo período y oficina.</p>
-
-    <div class="row g-4">
+    @* 3. Montos y demora *@
+    <div class="row g-3 mb-4">
         <div class="col-lg-6">
-            <h3 class="h6">1. Evaluaciones por mes y oficina</h3>
-            @if (g.PorMesYOficina.Count == 0) { <p class="text-muted small">Sin evaluaciones en el período.</p> }
-            else
-            {
-                <table class="table table-sm tabla-compacta align-middle">
-                    <thead><tr><th>Mes</th><th>Oficina</th><th class="text-end">Ingresadas</th><th class="text-end">Aprobadas</th><th class="text-end">Rechazadas</th><th class="text-end">Tasa de aprobación</th></tr></thead>
-                    <tbody>
-                        @foreach (var f in g.PorMesYOficina)
+            <div class="card border-0 shadow-sm h-100"><div class="card-body">
+                <h2 class="h6 mb-3">Monto aprobado por instrumento</h2>
+                @if (g.MontoPorInstrumento.Count == 0) { <p class="text-muted small mb-0">No hay créditos aprobados en el período.</p> }
+                else
+                {
+                    var max = (double)g.MontoPorInstrumento.Max(m => m.Monto);
+                    foreach (var m in g.MontoPorInstrumento)
+                    {
+                        <Barra Etiqueta="@m.Grupo" Ancho="@(max == 0 ? 0 : 100.0 * (double)m.Monto / max)" Texto="@($"{Formato.Dolares((double)m.Monto)} · {Pct(m.Porcentaje)}")" />
+                    }
+                    <h3 class="h6 mt-4 mb-2">Por tipo de productor</h3>
+                    <div class="d-flex" style="height:28px;gap:2px" role="img" aria-label="@AriaTipoProductor">
+                        @foreach (var (m, i) in g.MontoPorTipoProductor.Select((m, i) => (m, i)))
                         {
-                            <tr><td>@f.Mes.ToString("MMM yyyy", Formato.Chile)</td><td>@f.Oficina</td><td class="text-end">@f.Ingresadas</td>
-                                <td class="text-end text-success">@f.Aprobadas</td><td class="text-end text-danger">@f.Rechazadas</td>
-                                <td class="text-end">@(f.TasaAprobacion is double t ? Cl($"{t:N1} %") : "—")</td></tr>
+                            <div class="d-flex align-items-center px-2 small fw-semibold text-white" title="@m.Grupo: @Formato.Dolares((double)m.Monto)"
+                                 style="flex:@Graficos.N(Math.Max(m.Porcentaje, 0.1)) 1 0;border-radius:4px;background:@(i == 0 ? Graficos.Turquesa : Graficos.Naranjo)">
+                                @if (m.Porcentaje >= 12) { @Pct(m.Porcentaje) }
+                            </div>
+                        }
+                    </div>
+                    <div class="d-flex flex-wrap gap-3 small mt-1">
+                        @foreach (var (m, i) in g.MontoPorTipoProductor.Select((m, i) => (m, i)))
+                        {
+                            <span class="d-inline-flex align-items-center gap-1"><span style="width:10px;height:10px;border-radius:2px;display:inline-block;background:@(i == 0 ? Graficos.Turquesa : Graficos.Naranjo)"></span>@m.Grupo · @Formato.Dolares((double)m.Monto)</span>
+                        }
+                    </div>
+                }
+            </div></div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100"><div class="card-body">
+                <h2 class="h6 mb-1">¿Dónde se demora la aprobación?</h2>
+                <p class="small text-muted">Horas hábiles promedio desde que la evaluación llega a cada nivel hasta que decide.</p>
+                @if (g.PorNivel.Count == 0) { <p class="text-muted small mb-0">No hay decisiones en el período.</p> }
+                else
+                {
+                    var max = g.PorNivel.Max(n => n.HorasPromedio);
+                    foreach (var n in g.PorNivel)
+                    {
+                        <Barra Etiqueta="@n.Nivel" Ancho="@(max == 0 ? 0 : 100 * n.HorasPromedio / max)"
+                               Texto="@TextoNivel(n)" />
+                    }
+                }
+                <div class="mt-3 pt-2 border-top small">
+                    <span class="text-muted">Tiempo total promedio, del ingreso al dictamen:</span>
+                    <b>@TextoTpe</b>
+                </div>
+            </div></div>
+        </div>
+    </div>
+
+    @* 4. Desempeño del sistema (KPI) *@
+    <h2 class="h5 mb-1">Desempeño del sistema</h2>
+    <p class="small text-muted mb-2">Indicadores clave (KPI) con los que se mide si la plataforma cumple sus objetivos.</p>
+    <div class="row g-3 mb-3">
+        <Tarjeta Nombre="Tiempo promedio de tramitación" Valor="@ValorTpe"
+                 Descripcion="Horas hábiles desde el ingreso hasta el dictamen." Meta="33 % menos que con la planilla Excel"
+                 Base="@($"{r.DetalleTpe.Count} evaluaciones con dictamen")" TextoSinEstado="Línea base en F3" />
+        <Tarjeta Nombre="Errores en datos de mercado" Valor="@Pct(r.Tep)" Estado="@(r.Tep is double p ? (bool?)(p <= ServicioIndicadores.MetaTep) : null)"
+                 Descripcion="Evaluaciones calculadas con un dólar o cobre desactualizado." Meta="0 %"
+                 Base="@($"{r.DetalleTep.Count} evaluaciones calculadas")" />
+        <Tarjeta Nombre="Evaluaciones con registro completo" Valor="@Pct(r.Itr)" Estado="@(r.Itr is double i ? (bool?)(i >= ServicioIndicadores.MetaItr) : null)"
+                 Descripcion="Con cada decisión, su causal y su auditoría." Meta="100 %"
+                 Base="@($"{r.DetalleItr.Count} evaluaciones con dictamen")" />
+        <Tarjeta Nombre="Mercado actualizado automáticamente" Valor="@Pct(r.Iam)" Estado="@(r.Iam is double a ? (bool?)(a >= ServicioIndicadores.MetaIam) : null)"
+                 Descripcion="Días hábiles con dólar y cobre cargados solos antes de las 09:30." Meta="95 % o más"
+                 Base="@($"{r.DetalleIam.Count} días hábiles")" />
+    </div>
+
+    <details class="mb-2">
+        <summary class="small text-muted">Ver el detalle de los indicadores (TPE, TEP, ITR e IAM)</summary>
+        <div class="row g-3 mt-1">
+            <div class="col-lg-6">
+                <h3 class="h6">Tiempo de tramitación (TPE)</h3>
+                <table class="table table-sm tabla-compacta">
+                    <thead><tr><th>Evaluación</th><th>Dictamen</th><th>Ingreso</th><th>Dictamen</th><th class="text-end">Horas hábiles</th></tr></thead>
+                    <tbody>
+                        @foreach (var f in r.DetalleTpe)
+                        {
+                            <tr><td><a href="evaluaciones/@f.Id">@f.Nro</a></td><td>@ServicioExportacion.NombreEstado(f.Estado)</td><td>@f.Ingreso.ToString("dd-MM HH:mm")</td>
+                                <td>@f.Dictamen.ToString("dd-MM HH:mm")</td><td class="text-end">@f.HorasHabiles.ToString("N1", Formato.Chile)</td></tr>
                         }
                     </tbody>
                 </table>
-            }
+            </div>
+            <div class="col-lg-6">
+                <h3 class="h6">Datos de mercado usados (TEP)</h3>
+                <table class="table table-sm tabla-compacta">
+                    <thead><tr><th>Evaluación</th><th>Último cálculo</th><th>Resultado</th></tr></thead>
+                    <tbody>
+                        @foreach (var f in r.DetalleTep)
+                        {
+                            <tr><td><a href="evaluaciones/@f.Id">@f.Nro</a></td><td>@f.FechaCalculo.ToString("dd-MM HH:mm")</td><td>@(f.Problema ?? "Dólar y cobre vigentes")</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="col-lg-6">
+                <h3 class="h6">Registro de cada dictamen (ITR)</h3>
+                <table class="table table-sm tabla-compacta">
+                    <thead><tr><th>Evaluación</th><th>Dictamen</th><th>Registro</th></tr></thead>
+                    <tbody>
+                        @foreach (var f in r.DetalleItr)
+                        {
+                            <tr><td><a href="evaluaciones/@f.Id">@f.Nro</a></td><td>@ServicioExportacion.NombreEstado(f.Estado)</td><td>@(f.Trazable ? "Completo" : string.Join("; ", f.Faltas))</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="col-lg-6">
+                <h3 class="h6">Actualización diaria del mercado (IAM)</h3>
+                <table class="table table-sm tabla-compacta">
+                    <thead><tr><th>Día</th><th>Dólar</th><th>Cobre</th><th>Antes de 09:30</th></tr></thead>
+                    <tbody>
+                        @foreach (var f in r.DetalleIam)
+                        {
+                            <tr><td>@f.Dia.ToString("ddd dd-MM", Formato.Chile)</td><td>@Hora(f.Dolar)</td><td>@Hora(f.Cobre)</td><td>@(f.Cumple ? "✓ Sí" : "✗ No")</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
         </div>
-
-        <div class="col-lg-6">
-            <h3 class="h6">2. ¿En qué nivel se demora la aprobación?</h3>
-            @if (g.PorNivel.Count == 0) { <p class="text-muted small">Sin decisiones en el período.</p> }
-            else
-            {
-                var max = g.PorNivel.Max(f => f.HorasPromedio);
-                foreach (var f in g.PorNivel)
-                {
-                    <Barra Etiqueta="@f.Nivel" Ancho="@(max == 0 ? 0 : f.HorasPromedio / max * 100)"
-                           Texto="@Cl($"{f.HorasPromedio:N1} h hábiles promedio · {f.Decisiones} decisiones")" />
-                }
-            }
-        </div>
-
-        <div class="col-lg-6">
-            <h3 class="h6">3. Monto aprobado por instrumento</h3>
-            @if (g.MontoPorInstrumento.Count == 0) { <p class="text-muted small">Sin evaluaciones aprobadas en el período.</p> }
-            else
-            {
-                foreach (var f in g.MontoPorInstrumento)
-                {
-                    <Barra Etiqueta="@f.Grupo" Ancho="@f.Porcentaje" Texto="@Cl($"US$ {f.Monto:N0} · {f.Porcentaje:N1} % · {f.Evaluaciones} eval.")" />
-                }
-                <h3 class="h6 mt-3">Monto aprobado por tipo de productor</h3>
-                foreach (var f in g.MontoPorTipoProductor)
-                {
-                    <Barra Etiqueta="@f.Grupo" Ancho="@f.Porcentaje" Texto="@Cl($"US$ {f.Monto:N0} · {f.Porcentaje:N1} %")" />
-                }
-            }
-        </div>
-
-        <div class="col-lg-6">
-            <h3 class="h6">4. Principales causales de rechazo</h3>
-            @if (g.Causales.Count == 0) { <p class="text-muted small">Sin evaluaciones rechazadas en el período.</p> }
-            else
-            {
-                foreach (var f in g.Causales)
-                {
-                    <Barra Etiqueta="@Cl($"{f.Codigo} · {f.Descripcion}")" Ancho="@f.Porcentaje" Color="danger"
-                           Texto="@TextoCausal(f)" />
-                }
-            }
-        </div>
-    </div>
+    </details>
 }
 
 @code {
     private DateTime _desde, _hasta;
-    private string _oficina = "";
+    private string _oficina = "", _periodo = "anio";
     private IReadOnlyList<Oficina> _oficinas = [];
     private ResultadoIndicadores? _r;
     private ResultadoGestion? _g;
+    private int _ingresadas, _aprobadas, _rechazadas;
+    private decimal _monto;
+    private List<string> _meses = [];
+    private List<SerieGrafico> _seriesMes = [];
+
+    private string NombreOficina => int.TryParse(_oficina, out var o) ? _oficinas.FirstOrDefault(x => x.Id == o)?.Nombre ?? "" : "Todas las oficinas";
 
     protected override void OnInitialized()
     {
         _oficinas = Catalogos.Oficinas();
-        MesActual();
+        Periodo("anio");
     }
 
-    private void MesActual()
+    private void Periodo(string periodo)
     {
-        _desde = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-        _hasta = DateTime.Today;
+        _periodo = periodo;
+        var hoy = DateTime.Today;
+        _hasta = hoy;
+        _desde = periodo switch
+        {
+            "mes" => new DateTime(hoy.Year, hoy.Month, 1),
+            "trimestre" => new DateTime(hoy.Year, hoy.Month, 1).AddMonths(-2),
+            _ => new DateTime(hoy.Year, 1, 1)
+        };
+        Calcular();
+    }
+
+    private void FechasManuales()
+    {
+        _periodo = "";
         Calcular();
     }
 
@@ -234,11 +257,33 @@
         int? oficina = int.TryParse(_oficina, out var o) ? o : null;
         _r = Servicio.Calcular(_desde, _hasta, oficina);
         _g = Gestion.Calcular(_desde, _hasta, oficina);
+
+        _ingresadas = _g.PorMesYOficina.Sum(f => f.Ingresadas);
+        _aprobadas = _g.PorMesYOficina.Sum(f => f.Aprobadas);
+        _rechazadas = _g.PorMesYOficina.Sum(f => f.Rechazadas);
+        _monto = _g.MontoPorInstrumento.Sum(m => m.Monto);
+
+        // un punto por mes del período (también los meses sin dictámenes), como máximo los últimos 12
+        var meses = new List<DateTime>();
+        for (var m = new DateTime(_desde.Year, _desde.Month, 1); m <= _hasta; m = m.AddMonths(1)) meses.Add(m);
+        meses = meses.TakeLast(12).ToList();
+        _meses = meses.Select(m => m.ToString("MMM yy", Formato.Chile)).ToList();
+        _seriesMes =
+        [
+            new("Aprobadas", Graficos.Turquesa, meses.Select(m => (double)_g.PorMesYOficina.Where(f => f.Mes == m).Sum(f => f.Aprobadas)).ToList()),
+            new("Rechazadas", Graficos.Naranjo, meses.Select(m => (double)_g.PorMesYOficina.Where(f => f.Mes == m).Sum(f => f.Rechazadas)).ToList()),
+        ];
     }
 
-    private static string TextoCausal(FilaCausal f) => $"{f.Veces} " + (f.Veces == 1 ? "rechazo" : "rechazos") + Cl($" · {f.Porcentaje:N1} %");
-    private static string Cl(FormattableString texto) => texto.ToString(Formato.Chile);
-    private static string Pct(double? v) => v is double x ? Cl($"{x:N1} %") : "—";
+    private string DetalleAprobadas => _aprobadas + _rechazadas == 0 ? "sin dictámenes en el período"
+        : Pct(100.0 * _aprobadas / (_aprobadas + _rechazadas)) + " de las resueltas";
+    private string DetalleRechazadas => _rechazadas == 0 ? "ninguna en el período"
+        : _g!.Causales.Count + (_g.Causales.Count == 1 ? " causal distinta" : " causales distintas");
+    private string ValorTpe => _r?.Tpe is double t ? t.ToString("N1", Formato.Chile) + " h" : "—";
+    private string TextoTpe => _r?.Tpe is double t ? t.ToString("N1", Formato.Chile) + " horas hábiles" : "sin dictámenes";
+    private static string TextoNivel(FilaNivel n) =>
+        n.HorasPromedio.ToString("N1", Formato.Chile) + " h · " + n.Decisiones + (n.Decisiones == 1 ? " decisión" : " decisiones");
+    private string AriaTipoProductor => string.Join("; ", (_g?.MontoPorTipoProductor ?? []).Select(m => m.Grupo + " " + Pct(m.Porcentaje)));
+    private static string Pct(double? v) => v is double x ? x.ToString("N1", Formato.Chile) + " %" : "—";
     private static string Hora(DateTime? d) => d?.ToString("HH:mm") ?? "—";
-    private static string Estado(string e) => e == EstadosSolicitud.Aprobada ? "Aprobada" : e == EstadosSolicitud.Rechazada ? "Rechazada" : e;
 }

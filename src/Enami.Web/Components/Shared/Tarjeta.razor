@@ -1,22 +1,28 @@
-@* Tarjeta de un indicador del tablero: valor, meta y si la cumple (verde), no la cumple (rojo) o no se puede evaluar (gris). *@
+@* Tarjeta de un indicador de desempeño: nombre comprensible, valor, meta y estado frente a la meta (con ícono y texto, no solo color). *@
 <div class="col-sm-6 col-xl-3">
-    <div class="card h-100 border-@Color">
+    <div class="card h-100 border-0 shadow-sm">
         <div class="card-body">
-            <div class="small text-muted"><b>@Codigo</b> · @Nombre</div>
-            <div class="display-6 my-1 text-@Color">@Valor</div>
-            <div class="small">Meta: @Meta</div>
-            <div class="small text-muted">@Base</div>
+            <div class="d-flex justify-content-between align-items-start gap-2">
+                <div class="small fw-semibold">@Nombre</div>
+                <span class="badge rounded-pill @ClaseEstado text-nowrap">@TextoEstado</span>
+            </div>
+            <div class="fs-2 fw-semibold my-1">@Valor</div>
+            <div class="small text-muted">@Descripcion</div>
+            <div class="small mt-2"><span class="text-muted">Meta:</span> @Meta</div>
+            @if (!string.IsNullOrEmpty(Base)) { <div class="small text-muted">@Base</div> }
         </div>
     </div>
 </div>
 
 @code {
-    [Parameter, EditorRequired] public string Codigo { get; set; } = "";
     [Parameter, EditorRequired] public string Nombre { get; set; } = "";
     [Parameter, EditorRequired] public string Valor { get; set; } = "";
     [Parameter, EditorRequired] public string Meta { get; set; } = "";
+    [Parameter] public string Descripcion { get; set; } = "";
     [Parameter] public string Base { get; set; } = "";
-    /// <summary>true = cumple la meta; false = no la cumple; null = sin datos o sin meta absoluta.</summary>
+    /// <summary>true = cumple la meta; false = no la cumple; null = sin datos o meta por medir.</summary>
     [Parameter] public bool? Estado { get; set; }
-    private string Color => Estado switch { true => "success", false => "danger", _ => "secondary" };
+    [Parameter] public string TextoSinEstado { get; set; } = "— Sin datos";
+    private string ClaseEstado => Estado switch { true => "text-bg-success", false => "text-bg-danger", _ => "text-bg-light border" };
+    private string TextoEstado => Estado switch { true => "✓ Cumple", false => "✗ No cumple", _ => TextoSinEstado };
 }

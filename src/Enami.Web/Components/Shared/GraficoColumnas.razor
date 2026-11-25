@@ -1,0 +1,69 @@
+@* Columnas apiladas por categoría (por ejemplo, evaluaciones aprobadas y rechazadas por mes). Leyenda arriba,
+   total sobre cada columna, eje con valores redondos, grilla tenue, 2 px de separación entre segmentos y el detalle al pasar el mouse. *@
+<div>
+    @if (Series.Count > 1)
+    {
+        <div class="d-flex gap-3 small mb-1">
+            @foreach (var s in Series)
+            {
+                <span class="d-inline-flex align-items-center gap-1"><span style="width:10px;height:10px;border-radius:2px;background:@s.Color;display:inline-block"></span>@s.Nombre</span>
+            }
+        </div>
+    }
+    <svg viewBox="0 0 @Ancho @Alto" width="100%" role="img" aria-label="@Titulo" style="font-family:inherit;display:block">
+        @for (double t = 0; t <= _escala.Tope + 0.001; t += _escala.Paso)
+        {
+            var y = Y(t);
+            <line x1="@N(Izq)" x2="@N(Ancho - 4)" y1="@N(y)" y2="@N(y)" stroke="@Graficos.Grilla" stroke-width="1" />
+            <text x="@N(Izq - 6)" y="@N(y + 4)" text-anchor="end" font-size="11" fill="@Graficos.TextoSecundario">@t.ToString("N0", Formato.Chile)</text>
+        }
+        @for (int i = 0; i < Categorias.Count; i++)
+        {
+            double banda = (Ancho - Izq - 4) / Categorias.Count, cx = Izq + banda * i + banda / 2, w = Math.Min(28, banda * 0.55);
+            double baseY = Y(0), total = Series.Sum(s => s.Valores[i]);
+            int ultima = Enumerable.Range(0, Series.Count).LastOrDefault(k => Series[k].Valores[i] > 0, -1);
+            for (int k = 0; k < Series.Count; k++)
+            {
+                double v = Series[k].Valores[i];
+                if (v <= 0) continue;
+                double alto = baseY - Y(v), y = baseY - alto;
+                double visible = Math.Max(alto - (k == ultima ? 0 : 2), 1);
+                var titulo = $"{Categorias[i]} · {Series[k].Nombre}: {v.ToString("N0", Formato.Chile)}";
+                if (k == ultima && visible > 4)
+                {
+                    // extremo redondeado (4 px) arriba y base recta
+                    <rect x="@N(cx - w / 2)" y="@N(y)" width="@N(w)" height="@N(visible)" rx="4" fill="@Series[k].Color"><title>@titulo</title></rect>
+                    <rect x="@N(cx - w / 2)" y="@N(y + 4)" width="@N(w)" height="@N(visible - 4)" fill="@Series[k].Color"><title>@titulo</title></rect>
+                }
+                else
+                {
+                    <rect x="@N(cx - w / 2)" y="@N(y + (k == ultima ? 0 : 2))" width="@N(w)" height="@N(visible)" fill="@Series[k].Color"><title>@titulo</title></rect>
+                }
+                baseY = y;
+            }
+            if (total > 0)
+            {
+                <text x="@N(cx)" y="@N(Y(total) - 5)" text-anchor="middle" font-size="11" font-weight="600" fill="#2E3236">@total.ToString("N0", Formato.Chile)</text>
+            }
+            <text x="@N(cx)" y="@N(Alto - 6)" text-anchor="middle" font-size="11" fill="@Graficos.TextoSecundario">@Categorias[i]</text>
+        }
+    </svg>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<string> Categorias { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<SerieGrafico> Series { get; set; } = [];
+    [Parameter] public string Titulo { get; set; } = "";
+    [Parameter] public int Alto { get; set; } = 220;
+    private const double Ancho = 640, Izq = 34, Arriba = 18, Abajo = 24;
+    private (double Tope, double Paso) _escala;
+
+    protected override void OnParametersSet()
+    {
+        double max = Categorias.Count == 0 ? 0 : Enumerable.Range(0, Categorias.Count).Max(i => Series.Sum(s => s.Valores[i]));
+        _escala = Graficos.Escala(max);
+    }
+
+    private double Y(double v) => Arriba + (Alto - Arriba - Abajo) * (1 - v / _escala.Tope);
+    private static string N(double x) => Graficos.N(x);
+}
