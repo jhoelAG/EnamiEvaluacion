@@ -1,0 +1,17 @@
+@* Barra horizontal simple para el tablero: etiqueta, barra proporcional (0 a 100) y texto con el valor. *@
+<div class="mb-2">
+    <div class="small">@Etiqueta</div>
+    <div class="d-flex align-items-center gap-2">
+        <div class="flex-grow-1 bg-light rounded" style="height:10px">
+            <div class="bg-@Color rounded" style="height:10px;width:@(Math.Clamp(Ancho, 0, 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+        </div>
+        <div class="small text-muted text-nowrap">@Texto</div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Etiqueta { get; set; } = "";
+    [Parameter, EditorRequired] public double Ancho { get; set; }
+    [Parameter] public string Texto { get; set; } = "";
+    [Parameter] public string Color { get; set; } = "primary";
+}

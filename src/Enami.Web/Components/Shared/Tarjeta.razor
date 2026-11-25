@@ -1,0 +1,22 @@
+@* Tarjeta de un indicador del tablero: valor, meta y si la cumple (verde), no la cumple (rojo) o no se puede evaluar (gris). *@
+<div class="col-sm-6 col-xl-3">
+    <div class="card h-100 border-@Color">
+        <div class="card-body">
+            <div class="small text-muted"><b>@Codigo</b> · @Nombre</div>
+            <div class="display-6 my-1 text-@Color">@Valor</div>
+            <div class="small">Meta: @Meta</div>
+            <div class="small text-muted">@Base</div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Codigo { get; set; } = "";
+    [Parameter, EditorRequired] public string Nombre { get; set; } = "";
+    [Parameter, EditorRequired] public string Valor { get; set; } = "";
+    [Parameter, EditorRequired] public string Meta { get; set; } = "";
+    [Parameter] public string Base { get; set; } = "";
+    /// <summary>true = cumple la meta; false = no la cumple; null = sin datos o sin meta absoluta.</summary>
+    [Parameter] public bool? Estado { get; set; }
+    private string Color => Estado switch { true => "success", false => "danger", _ => "secondary" };
+}

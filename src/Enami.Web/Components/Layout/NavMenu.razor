@@ -72,6 +72,13 @@
                 </NavLink>
             </div>
         </AuthorizeView>
+        <AuthorizeView Roles="@($"{Roles.Jefatura},{Roles.Subgerente},{Roles.Administrador}")">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="indicadores">
+                    <span class="bi icono-indicadores" aria-hidden="true"></span> Indicadores
+                </NavLink>
+            </div>
+        </AuthorizeView>
         <AuthorizeView Roles="@($"{Roles.Jefatura},{Roles.Administrador}")">
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="auditoria">
