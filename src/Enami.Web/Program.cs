@@ -16,6 +16,16 @@ builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 
 // Persistencia (SQL Server o memoria, según "Persistencia" en appsettings.json) y servicios de dominio.
 builder.Services.AddPersistenciaEnami(builder.Configuration);
+// Membrete del dictamen en PDF (sección «Dictamen»): el logo oficial se lee de Dictamen:RutaLogo (por defecto
+// wwwroot/img/logo-dictamen.png, PNG o JPG); si el archivo no existe, el membrete usa la sigla en texto.
+// Dictamen:Leyenda agrega una leyenda al pie de cada página (por ejemplo, «Prototipo académico · datos de prueba.»).
+var rutaLogo = Path.Combine(builder.Environment.ContentRootPath,
+    builder.Configuration["Dictamen:RutaLogo"] ?? Path.Combine("wwwroot", "img", "logo-dictamen.png"));
+builder.Services.AddSingleton(new OpcionesDictamen
+{
+    Logo = File.Exists(rutaLogo) ? File.ReadAllBytes(rutaLogo) : null,
+    Leyenda = builder.Configuration["Dictamen:Leyenda"]
+});
 
 // Inicio de sesión con cookie (RF-11): expira tras 30 minutos sin actividad y se revalida contra la base cada minuto,
 // de modo que un usuario deshabilitado pierde el acceso aunque tenga la página abierta (HU-01).
@@ -116,6 +126,21 @@ app.MapGet("/exportar/evaluaciones", (HttpContext http, ServicioExportacion expo
     if (usuario is null) return Results.Unauthorized();
     var archivo = exportacion.Evaluaciones(usuario, string.IsNullOrWhiteSpace(estado) ? null : estado, texto);
     return Results.File(archivo, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"evaluaciones-{DateTime.Now:yyyy-MM-dd-HHmm}.xlsx");
+}).RequireAuthorization();
+
+// Dictamen de una evaluación en PDF (mismo alcance por rol que la bandeja; la descarga queda en la auditoría)
+app.MapGet("/exportar/dictamen/{id:long}", (long id, HttpContext http, ServicioDictamen dictamen) =>
+{
+    var usuario = http.User.Usuario();
+    if (usuario is null) return Results.Unauthorized();
+    try
+    {
+        return dictamen.Generar(id, usuario) is { } d ? Results.File(d.Contenido, "application/pdf", d.Archivo) : Results.NotFound();
+    }
+    catch (ErrorNegocio ex)
+    {
+        return Results.BadRequest(ex.Message);
+    }
 }).RequireAuthorization();
 
 // Punto de salud para el monitoreo (sección 6.1 del informe): responde sin consultar la base de datos.

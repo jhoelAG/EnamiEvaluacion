@@ -397,7 +397,14 @@
             <div id="resultado" class="pt-2" style="scroll-margin-top: 4.5rem">
                 @if (_resultado.Exitoso)
                 {
-                    <h2 class="h4 mb-3">Resultado del cálculo</h2>
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                        <h2 class="h4 mb-0">Resultado del cálculo</h2>
+                        @if (_detalle is { UltimoResultado: not null } guardada)
+                        {
+                            <a class="btn btn-outline-secondary btn-sm" href="@($"exportar/dictamen/{guardada.Solicitud.Id}")" download
+                               title="Dictamen con el último cálculo guardado, los antecedentes y la cadena de aprobación">Descargar dictamen (PDF)</a>
+                        }
+                    </div>
                     <p class="small text-muted">@_origenResultado</p>
                     <ResultadoVan Resultado="_resultado" Plantilla="_plantillaResultado" />
                 }
@@ -423,6 +430,10 @@
                     }
                     <span class="cifra"><small>VAN</small><strong>@Formato.Dolares(res.Van)</strong></span>
                     <a class="small" href="@($"{Nav.ToBaseRelativePath(Nav.Uri).Split('#')[0]}#resultado")">Ver el detalle</a>
+                    @if (_detalle is { UltimoResultado: not null } det)
+                    {
+                        <a class="small" href="@($"exportar/dictamen/{det.Solicitud.Id}")" download>Dictamen en PDF</a>
+                    }
                 }
                 else
                 {

@@ -65,7 +65,8 @@ public class ServicioSolicitudes(IAlmacen db, IRepositorioPlantillas plantillas,
         var q = db.Tabla<SolicitudCredito>();
         if (usuario.Rol == Roles.Ingeniero) q = q.Where(s => s.IdIngeniero == usuario.Id);
         if (!string.IsNullOrEmpty(estado)) q = q.Where(s => s.Estado == estado);
-        var lista = q.OrderByDescending(s => s.Id).Take(500).ToList();
+        // sin tope: la bandeja pagina en pantalla y la exportación a Excel incluye todas (antes se cortaba en 500)
+        var lista = q.OrderByDescending(s => s.Id).ToList();
 
         var idsFaena = lista.Select(s => s.IdFaena).Distinct().ToList();
         var faenas = db.Tabla<Faena>().Where(f => idsFaena.Contains(f.Id)).ToDictionary(f => f.Id);

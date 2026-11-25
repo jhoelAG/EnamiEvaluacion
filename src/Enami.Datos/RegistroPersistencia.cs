@@ -44,6 +44,7 @@ public static class RegistroPersistencia
         s.AddScoped<ServicioIndicadores>();
         s.AddScoped<ServicioGestion>();
         s.AddScoped<ServicioExportacion>();
+        s.AddScoped<ServicioDictamen>();
         // aviso a la Logic App de aprobación (BOT-03); sin URL configurada la aprobación se hace solo en la aplicación
         s.Configure<OpcionesFlujos>(config.GetSection("Flujos"));
         s.AddHttpClient<INotificadorFlujos, NotificadorFlujosHttp>();

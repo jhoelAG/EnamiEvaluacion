@@ -46,10 +46,11 @@
 </div>
 
 <p class="small text-muted mb-1">@ResumenLista</p>
+<Paginador Pagina="_pagina.Pagina" Paginas="_pagina.Paginas" Cambio="IrA" />
 <table class="table table-sm tabla-compacta align-middle">
     <thead><tr><th>Fecha</th><th>Autor</th><th>Acción</th><th>Evaluación</th><th>Detalle</th></tr></thead>
     <tbody>
-        @foreach (var a in _lista)
+        @foreach (var a in _pagina.Filas)
         {
             <tr>
                 <td class="text-nowrap">@a.Fecha.ToString("dd-MM-yyyy HH:mm:ss")</td>
@@ -61,12 +62,12 @@
         }
     </tbody>
 </table>
+<Paginador Pagina="_pagina.Pagina" Paginas="_pagina.Paginas" Cambio="IrA" />
 
 @code {
-    private const int Maximo = 500;
     private Dictionary<int, string> _nombres = [];
     private IReadOnlyList<string> _acciones = [], _robots = [];
-    private IReadOnlyList<Auditoria> _lista = [];
+    private PaginaAuditoria _pagina = new([], 0, 1, PaginaAuditoria.TamanoPorDefecto);
     private DateTime? _desde, _hasta;
     private string _accion = "", _autor = "", _nro = "";
 
@@ -77,11 +78,19 @@
         Buscar();
     }
 
-    private string ResumenLista => _lista.Count == Maximo
-        ? "Se muestran las " + Maximo + " acciones más recientes que coinciden; acote los filtros para ver otras."
-        : _lista.Count + (_lista.Count == 1 ? " acción." : " acciones.");
+    private string ResumenLista => _pagina.Total switch
+    {
+        0 => "No hay acciones que coincidan.",
+        1 => "1 acción.",
+        _ when _pagina.Paginas == 1 => $"{_pagina.Total:N0} acciones.",
+        _ => $"{_pagina.Total:N0} acciones; se muestran de la {(_pagina.Pagina - 1) * _pagina.TamanoPagina + 1:N0} a la " +
+             $"{(_pagina.Pagina - 1) * _pagina.TamanoPagina + _pagina.Filas.Count:N0}, las más recientes primero."
+    };
 
-    private void Buscar() => _lista = Auditoria.Buscar(_desde, _hasta, _accion, _autor, _nro, Maximo);
+    /// <summary>Al cambiar un filtro se vuelve a la primera página.</summary>
+    private void Buscar() => IrA(1);
+
+    private void IrA(int pagina) => _pagina = Auditoria.Paginar(_desde, _hasta, _accion, _autor, _nro, pagina);
 
     private void Limpiar()
     {

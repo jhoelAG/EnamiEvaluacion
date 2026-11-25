@@ -48,6 +48,7 @@
 }
 else
 {
+    <p class="small text-muted mb-1">@ResumenLista</p>
     <div class="table-responsive">
         <table class="table table-sm tabla-compacta align-middle">
             <thead>
@@ -55,7 +56,7 @@ else
                     <th class="text-end">Monto</th><th class="text-end">VAN</th><th>Estado</th><th>Ingeniero</th></tr>
             </thead>
             <tbody>
-                @foreach (var s in _lista)
+                @foreach (var s in _lista.Skip((_pagina - 1) * TamanoPagina).Take(TamanoPagina))
                 {
                     <tr>
                         <td class="num"><a href="evaluaciones/@s.Id">@s.NroSolicitud</a></td>
@@ -76,6 +77,7 @@ else
             </tbody>
         </table>
     </div>
+    <Paginador Pagina="_pagina" Paginas="Paginas" Cambio="IrA" />
 }
 
 @code {
@@ -84,6 +86,14 @@ else
     private IReadOnlyList<SolicitudVista> _lista = [];
     private string _texto = "", _estado = "";
     private HashSet<long> _pendientes = [];
+    private const int TamanoPagina = 25;
+    private int _pagina = 1;
+    private int Paginas => Math.Max(1, (_lista.Count + TamanoPagina - 1) / TamanoPagina);
+    private void IrA(int pagina) => _pagina = pagina;
+
+    private string ResumenLista => Paginas == 1
+        ? (_lista.Count == 1 ? "1 evaluación." : $"{_lista.Count:N0} evaluaciones.")
+        : $"{_lista.Count:N0} evaluaciones; se muestran de la {(_pagina - 1) * TamanoPagina + 1:N0} a la {Math.Min(_pagina * TamanoPagina, _lista.Count):N0}.";
 
     private string Alcance => _usuario?.Rol switch
     {
@@ -103,6 +113,7 @@ else
         _pendientes = Aprobaciones.PendientesDe(_usuario!.Id).ToHashSet();
         _lista = Servicio.Listar(_usuario!, string.IsNullOrEmpty(_estado) ? null : _estado, _texto);
         if (_soloPendientes) _lista = _lista.Where(s => _pendientes.Contains(s.Id)).ToList();
+        _pagina = 1;   // al buscar o filtrar se vuelve a la primera página
     }
 
     private bool _soloPendientes;

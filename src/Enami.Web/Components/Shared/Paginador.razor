@@ -1,0 +1,19 @@
+@* Navegación por páginas de una lista: «Anterior», «Siguiente» y el total. No se muestra si hay una sola página. *@
+@if (Paginas > 1)
+{
+    <nav class="d-flex align-items-center gap-2 my-2" aria-label="Páginas">
+        <button class="btn btn-outline-secondary btn-sm" disabled="@(Pagina <= 1)" @onclick="() => Ir(1)" aria-label="Primera página">«</button>
+        <button class="btn btn-outline-secondary btn-sm" disabled="@(Pagina <= 1)" @onclick="() => Ir(Pagina - 1)">Anterior</button>
+        <span class="small text-muted">Página @Pagina de @Paginas</span>
+        <button class="btn btn-outline-secondary btn-sm" disabled="@(Pagina >= Paginas)" @onclick="() => Ir(Pagina + 1)">Siguiente</button>
+        <button class="btn btn-outline-secondary btn-sm" disabled="@(Pagina >= Paginas)" @onclick="() => Ir(Paginas)" aria-label="Última página">»</button>
+    </nav>
+}
+
+@code {
+    [Parameter, EditorRequired] public int Pagina { get; set; }
+    [Parameter, EditorRequired] public int Paginas { get; set; }
+    [Parameter] public EventCallback<int> Cambio { get; set; }
+
+    private Task Ir(int pagina) => Cambio.InvokeAsync(Math.Clamp(pagina, 1, Math.Max(1, Paginas)));
+}

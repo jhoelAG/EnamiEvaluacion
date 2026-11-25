@@ -15,6 +15,13 @@ public interface IHasherClaves
 }
 
 /// <summary>Datos de la sesión de un usuario autenticado.</summary>
+/// <summary>Una página del registro de auditoría.</summary>
+public record PaginaAuditoria(IReadOnlyList<Auditoria> Filas, int Total, int Pagina, int TamanoPagina)
+{
+    public const int TamanoPorDefecto = 50;
+    public int Paginas => Math.Max(1, (Total + TamanoPagina - 1) / TamanoPagina);
+}
+
 public record UsuarioSesion(int Id, string Correo, string NombreCompleto, string Rol, int? IdOficina, string? Oficina);
 
 /// <summary>Fila de la lista de usuarios (con los nombres del rol y la oficina).</summary>
@@ -201,7 +208,26 @@ public class ServicioAuditoria(IAlmacen db)
     /// Busca en la auditoría por fecha (días completos), acción, usuario o robot, y número de evaluación. Devuelve las más recientes
     /// primero, como máximo <paramref name="maximo"/>.
     /// </summary>
-    public IReadOnlyList<Auditoria> Buscar(DateTime? desde, DateTime? hasta, string? accion, string? autor, string? nroEvaluacion, int maximo = 500)
+    public IReadOnlyList<Auditoria> Buscar(DateTime? desde, DateTime? hasta, string? accion, string? autor, string? nroEvaluacion, int maximo = 500) =>
+        Filtrar(desde, hasta, accion, autor, nroEvaluacion).OrderByDescending(a => a.Id).Take(maximo).ToList();
+
+    /// <summary>
+    /// Una página de la auditoría con los mismos filtros que <see cref="Buscar"/>, las más recientes primero. La base de datos
+    /// solo entrega las filas de esa página (sin tope de 500) y el total, para recorrer todo el historial.
+    /// </summary>
+    public PaginaAuditoria Paginar(DateTime? desde, DateTime? hasta, string? accion, string? autor, string? nroEvaluacion,
+                                   int pagina, int tamanoPagina = PaginaAuditoria.TamanoPorDefecto)
+    {
+        tamanoPagina = Math.Clamp(tamanoPagina, 10, 200);
+        var q = Filtrar(desde, hasta, accion, autor, nroEvaluacion);
+        int total = q.Count();
+        int paginas = Math.Max(1, (total + tamanoPagina - 1) / tamanoPagina);
+        pagina = Math.Clamp(pagina, 1, paginas);
+        var filas = q.OrderByDescending(a => a.Id).Skip((pagina - 1) * tamanoPagina).Take(tamanoPagina).ToList();
+        return new PaginaAuditoria(filas, total, pagina, tamanoPagina);
+    }
+
+    private IQueryable<Auditoria> Filtrar(DateTime? desde, DateTime? hasta, string? accion, string? autor, string? nroEvaluacion)
     {
         var q = db.Tabla<Auditoria>();
         if (desde is DateTime d) { var inicio = d.Date; q = q.Where(a => a.Fecha >= inicio); }
@@ -215,7 +241,7 @@ public class ServicioAuditoria(IAlmacen db)
             var ids = db.Tabla<SolicitudCredito>().Where(s => s.NroSolicitud.Contains(nro)).Select(s => s.Id).ToList();
             q = q.Where(a => a.IdSolicitud != null && ids.Contains(a.IdSolicitud.Value));
         }
-        return q.OrderByDescending(a => a.Id).Take(maximo).ToList();
+        return q;
     }
 
     /// <summary>Acciones y robots distintos que hay en la auditoría, para los filtros.</summary>
