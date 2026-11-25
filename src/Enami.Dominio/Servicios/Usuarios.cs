@@ -197,6 +197,32 @@ public class ServicioAuditoria(IAlmacen db)
         db.Guardar();
     }
 
+    /// <summary>
+    /// Busca en la auditoría por fecha (días completos), acción, usuario o robot, y número de evaluación. Devuelve las más recientes
+    /// primero, como máximo <paramref name="maximo"/>.
+    /// </summary>
+    public IReadOnlyList<Auditoria> Buscar(DateTime? desde, DateTime? hasta, string? accion, string? autor, string? nroEvaluacion, int maximo = 500)
+    {
+        var q = db.Tabla<Auditoria>();
+        if (desde is DateTime d) { var inicio = d.Date; q = q.Where(a => a.Fecha >= inicio); }
+        if (hasta is DateTime h) { var fin = h.Date.AddDays(1); q = q.Where(a => a.Fecha < fin); }
+        if (!string.IsNullOrWhiteSpace(accion)) q = q.Where(a => a.Accion == accion);
+        if (!string.IsNullOrWhiteSpace(autor))
+            q = int.TryParse(autor, out var idUsuario) ? q.Where(a => a.IdUsuario == idUsuario) : q.Where(a => a.Robot == autor);
+        if (!string.IsNullOrWhiteSpace(nroEvaluacion))
+        {
+            var nro = nroEvaluacion.Trim();
+            var ids = db.Tabla<SolicitudCredito>().Where(s => s.NroSolicitud.Contains(nro)).Select(s => s.Id).ToList();
+            q = q.Where(a => a.IdSolicitud != null && ids.Contains(a.IdSolicitud.Value));
+        }
+        return q.OrderByDescending(a => a.Id).Take(maximo).ToList();
+    }
+
+    /// <summary>Acciones y robots distintos que hay en la auditoría, para los filtros.</summary>
+    public (IReadOnlyList<string> Acciones, IReadOnlyList<string> Robots) Catalogo() =>
+        (db.Tabla<Auditoria>().Select(a => a.Accion).Distinct().OrderBy(a => a).ToList(),
+         db.Tabla<Auditoria>().Where(a => a.Robot != null).Select(a => a.Robot!).Distinct().OrderBy(r => r).ToList());
+
     public IReadOnlyList<Auditoria> Ultimos(int cantidad = 50) =>
         db.Tabla<Auditoria>().OrderByDescending(a => a.Id).Take(cantidad).ToList();
 }

@@ -92,6 +92,8 @@ robots.MapPost("/formulas/validar", (ValidarFormula f) =>
 robots.MapPost("/evaluaciones/{id:long}/decision", async (long id, DecisionFlujo d, ServicioAprobaciones aprobaciones, INotificadorFlujos notificador,
                                                           ServicioAuditoria auditoria) =>
 {
+    if (string.IsNullOrWhiteSpace(d.Correo) || string.IsNullOrWhiteSpace(d.Decision))
+        return Results.BadRequest(new { error = "Faltan el correo del aprobador o la decisión." });
     try
     {
         // con clave de firma, la decisión debe traer el código firmado de la aprobación pendiente y venir del aprobador asignado

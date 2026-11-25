@@ -273,6 +273,7 @@ public class ServicioSolicitudes(IAlmacen db, IRepositorioPlantillas plantillas,
             avisos.Add("La faena pertenece a otra oficina; el visado lo hará el Jefe de esa oficina.");
 
         SolicitudCredito s;
+        Dictionary<string, string>? antes = null;
         const string inactivo = "El instrumento seleccionado está desactivado; elija otro instrumento de fomento.";
         if (id is null)
         {
@@ -292,11 +293,18 @@ public class ServicioSolicitudes(IAlmacen db, IRepositorioPlantillas plantillas,
             s = db.Tabla<SolicitudCredito>().FirstOrDefault(x => x.Id == id) ?? throw new ErrorNegocio("La evaluación de proyecto no existe.");
             if (!PuedeEditar(s, usuario)) throw new ErrorNegocio("Solo el ingeniero que la registró puede modificar la evaluación, y solo mientras está en borrador u observada.");
             if (!instrumento.Activo && instrumento.Id != s.IdInstrumento) throw new ErrorNegocio(inactivo);
+            antes = Foto(s, plantilla);
             Copiar(d, s);
             db.Guardar();
-            auditoria.Registrar("SOLICITUD_ACTUALIZADA", usuario.Id, s.Id, s.NroSolicitud);
         }
         GuardarDatos(s.Id, plantilla, d);
+        if (antes is not null)
+        {
+            // E7: historial de cambios con el valor anterior y el nuevo de cada dato modificado
+            var cambios = Cambios(antes, Foto(s, plantilla));
+            auditoria.Registrar("SOLICITUD_ACTUALIZADA", usuario.Id, s.Id,
+                cambios.Count == 0 ? $"{s.NroSolicitud}: guardada sin cambios en los datos" : $"{s.NroSolicitud}: " + string.Join("; ", cambios));
+        }
 
         ResultadoEvaluacion? calculo = null;
         if (plantilla is null)
@@ -450,6 +458,36 @@ public class ServicioSolicitudes(IAlmacen db, IRepositorioPlantillas plantillas,
         if (errores.Count > 0) throw new ErrorNegocio(string.Join(" ", errores));
         return (faena!, instrumento!);
     }
+
+    /// <summary>Datos de una evaluación como texto (campo → valor), para comparar antes y después de una corrección (E7).</summary>
+    private Dictionary<string, string> Foto(SolicitudCredito s, PlantillaCalculo? plantilla)
+    {
+        var chile = CultureInfo.GetCultureInfo("es-CL");
+        var f = new Dictionary<string, string>
+        {
+            ["Faena"] = db.Tabla<Faena>().Where(x => x.Id == s.IdFaena).Select(x => x.Codigo).FirstOrDefault() ?? s.IdFaena.ToString(),
+            ["Instrumento"] = db.Tabla<InstrumentoFomento>().Where(x => x.Id == s.IdInstrumento).Select(x => x.Nombre).FirstOrDefault() ?? "",
+            ["Monto solicitado (US$)"] = s.MontoSolicitado.ToString("N0", chile),
+            ["Plazo (meses)"] = s.PlazoMeses.ToString(chile),
+        };
+        var nombres = plantilla is null ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : CamposFormulario(plantilla).GroupBy(v => v.Codigo, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().Nombre, StringComparer.OrdinalIgnoreCase);
+        foreach (var x in db.Tabla<DatoSolicitud>().Where(x => x.IdSolicitud == s.Id).ToList())
+            f[nombres.GetValueOrDefault(x.Codigo, x.Codigo)] = x.ValorNumero is decimal n ? n.ToString("#,##0.######", chile) : x.ValorTexto ?? "";
+        var lineas = db.Tabla<LineaPresupuesto>().Where(x => x.IdSolicitud == s.Id).ToList();
+        if (lineas.Count > 0)
+            f["Presupuesto"] = $"{lineas.Count} líneas, US$ {lineas.Sum(l => l.Cantidad * l.CostoUnitario).ToString("N0", chile)}";
+        return f;
+    }
+
+    private static List<string> Cambios(Dictionary<string, string> antes, Dictionary<string, string> despues) =>
+        antes.Keys.Union(despues.Keys)
+            .Where(k => antes.GetValueOrDefault(k) != despues.GetValueOrDefault(k))
+            .Select(k => $"{k}: {Valor(antes.GetValueOrDefault(k))} → {Valor(despues.GetValueOrDefault(k))}")
+            .ToList();
+
+    private static string Valor(string? v) => string.IsNullOrEmpty(v) ? "—" : v.Length > 60 ? v[..60] + "…" : v;
 
     private static void Copiar(DatosSolicitud d, SolicitudCredito s)
     {

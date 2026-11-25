@@ -144,16 +144,16 @@
     <div class="row g-3 mb-3">
         <Tarjeta Nombre="Tiempo promedio de tramitación" Valor="@ValorTpe"
                  Descripcion="Horas hábiles desde el ingreso hasta el dictamen." Meta="33 % menos que con la planilla Excel"
-                 Base="@($"{r.DetalleTpe.Count} evaluaciones con dictamen")" TextoSinEstado="Línea base en F3" />
+                 Base="@BaseTpe" TextoSinEstado="Línea base en F3" />
         <Tarjeta Nombre="Errores en datos de mercado" Valor="@Pct(r.Tep)" Estado="@(r.Tep is double p ? (bool?)(p <= ServicioIndicadores.MetaTep) : null)"
                  Descripcion="Evaluaciones calculadas con un dólar o cobre desactualizado." Meta="0 %"
-                 Base="@($"{r.DetalleTep.Count} evaluaciones calculadas")" />
+                 Base="@BaseTep" />
         <Tarjeta Nombre="Evaluaciones con registro completo" Valor="@Pct(r.Itr)" Estado="@(r.Itr is double i ? (bool?)(i >= ServicioIndicadores.MetaItr) : null)"
                  Descripcion="Con cada decisión, su causal y su auditoría." Meta="100 %"
-                 Base="@($"{r.DetalleItr.Count} evaluaciones con dictamen")" />
+                 Base="@BaseItr" />
         <Tarjeta Nombre="Mercado actualizado automáticamente" Valor="@Pct(r.Iam)" Estado="@(r.Iam is double a ? (bool?)(a >= ServicioIndicadores.MetaIam) : null)"
                  Descripcion="Días hábiles con dólar y cobre cargados solos antes de las 09:30." Meta="95 % o más"
-                 Base="@($"{r.DetalleIam.Count} días hábiles")" />
+                 Base="@BaseIam" />
     </div>
 
     <details class="mb-2">
@@ -284,6 +284,11 @@
     private static string TextoNivel(FilaNivel n) =>
         n.HorasPromedio.ToString("N1", Formato.Chile) + " h · " + n.Decisiones + (n.Decisiones == 1 ? " decisión" : " decisiones");
     private string AriaTipoProductor => string.Join("; ", (_g?.MontoPorTipoProductor ?? []).Select(m => m.Grupo + " " + Pct(m.Porcentaje)));
+    private string BaseTpe => Cantidad(_r?.DetalleTpe.Count ?? 0, "evaluación con dictamen", "evaluaciones con dictamen");
+    private string BaseTep => Cantidad(_r?.DetalleTep.Count ?? 0, "evaluación calculada", "evaluaciones calculadas");
+    private string BaseItr => Cantidad(_r?.DetalleItr.Count ?? 0, "evaluación con dictamen", "evaluaciones con dictamen");
+    private string BaseIam => Cantidad(_r?.DetalleIam.Count ?? 0, "día hábil", "días hábiles");
+    private static string Cantidad(int n, string singular, string plural) => $"{n} {(n == 1 ? singular : plural)}";
     private static string Pct(double? v) => v is double x ? x.ToString("N1", Formato.Chile) + " %" : "—";
     private static string Hora(DateTime? d) => d?.ToString("HH:mm") ?? "—";
 }

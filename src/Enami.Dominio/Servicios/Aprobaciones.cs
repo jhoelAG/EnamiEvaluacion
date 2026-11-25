@@ -178,8 +178,12 @@ public class ServicioAprobaciones(IAlmacen db, ServicioSolicitudes solicitudes, 
         });
 
         string quien = $"{aprobador.NombreCompleto} ({NombreNivel(nivel)})";
+        // E6: el rechazo deja en la auditoría la causal elegida, no solo el comentario
+        string causal = d == Rechazar && idCausal is short ic
+            ? db.Tabla<CausalRechazo>().Where(c => c.Id == ic).Select(c => " — causal " + c.Codigo + " · " + c.Descripcion).FirstOrDefault() ?? ""
+            : "";
         auditoria.Registrar("DECISION_" + d, robot is null ? aprobador.Id : null, s.Id,
-            $"{quien}: {d.ToLowerInvariant()}{(comentario is null ? "" : " — " + comentario)}", robot);
+            $"{quien}: {d.ToLowerInvariant()}{causal}{(comentario is null ? "" : " — " + comentario)}", robot);
 
         if (siguiente is not null)
             return new ResultadoAprobacion(s.Estado, $"Aprobada por {quien}. Pasa al Subgerente {siguiente.NombreCompleto}.",
